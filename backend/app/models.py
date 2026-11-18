@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from sqlmodel import Field, SQLModel
 
-JOB_STATUSES = ("running", "done", "partial", "failed", "stopped")
+JOB_STATUSES = ("queued", "running", "done", "partial", "failed", "stopped")
 RECORD_STATUSES = (
     "pending", "done", "skipped", "not_found", "review_skipped", "failed", "manual",
 )  # fmt: skip

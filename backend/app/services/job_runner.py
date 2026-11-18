@@ -22,6 +22,8 @@ from app.services.presets import Preset
 from app.services.spotify_client import TrackMeta
 
 ProgressFn = Callable[[Iterable[Any], str, int], Iterable[Any]]
+OnRecord = Callable[[TrackRecord], None]
+OnJob = Callable[[Job, list[TrackRecord]], None]
 
 
 class TrackFetcher(Protocol):
@@ -58,12 +60,17 @@ def run_job(
     matcher: Matcher, settings: Settings, *, accept_review: bool, rematch: bool = False,
     max_workers: int | None = None, progress: ProgressFn = no_progress,
     worker: Worker = download_track, sleep: Callable[[float], None] = time.sleep,
+    on_record: OnRecord | None = None, on_job: OnJob | None = None,
 ) -> list[TrackRecord]:  # fmt: skip
     """Process the given records of a job and return all of its records afterwards.
 
     Ctrl+C: the job is saved as "stopped" and JobStopped is raised (resume picks it up).
+    on_record runs after every saved result, on_job at the start and after finish_job.
     """
     preset, out_dir = Preset(job.preset), Path(job.out_dir)
+    if on_job is not None:
+        assert job.id is not None
+        on_job(job, job_records(session, job.id))
     try:
         numbered = job.kind == "playlist"
         to_match: list[tuple[TrackRecord, TrackMeta]] = []
@@ -72,6 +79,8 @@ def run_job(
             existing = existing_output(track, preset, out_dir, index)
             if existing is not None:
                 save_result(session, record, TrackResult(track, "skipped", path=existing))
+                if on_record is not None:
+                    on_record(record)
             else:
                 to_match.append((record, track))
 
@@ -84,8 +93,12 @@ def run_job(
             record.video_id, record.score = cached.video_id, cached.score
             if cached.status == "not_found" or not cached.video_id:
                 save_result(session, record, TrackResult(track, "not_found"))
+                if on_record is not None:
+                    on_record(record)
             elif cached.status == "review" and not accept_review:
                 save_result(session, record, TrackResult(track, "review_skipped"))
+                if on_record is not None:
+                    on_record(record)
             else:
                 assert record.id is not None
                 by_key[record.id] = record
@@ -97,6 +110,8 @@ def run_job(
                                sleep=sleep)  # fmt: skip
         for item, result in progress(results, "Downloading...", len(items)):
             save_result(session, by_key[item.key], result)
+            if on_record is not None:
+                on_record(by_key[item.key])
     except KeyboardInterrupt:
         session.rollback()  # an interrupted commit must not poison the session
         stop_job(session, job)
@@ -104,7 +119,10 @@ def run_job(
         raise JobStopped(job.id) from None
     finally:
         cleanup_tmp(out_dir)
-    return finish_job(session, job)
+    records = finish_job(session, job)
+    if on_job is not None:
+        on_job(job, records)
+    return records
 
 
 def resume_job(

@@ -14,32 +14,13 @@ from app.commands import app, console, fail, rich_progress, stopped_exit, styled
 from app.config import load_settings
 from app.db import get_session
 from app.models import Job, TrackRecord
-from app.services.filenames import safe_filename
 from app.services.job_runner import create_job, run_job
+from app.services.job_setup import job_name, job_target, load_tracks
 from app.services.job_state import JobStopped
-from app.services.link_parser import parse_spotify_link
 from app.services.matcher import Matcher
 from app.services.presets import Preset
-from app.services.spotify_client import (
-    PlaylistNotAccessible,
-    SpotifyClient,
-    SpotifyConfigError,
-    TrackMeta,
-)
+from app.services.spotify_client import PlaylistNotAccessible, SpotifyConfigError
 from app.services.transcoder import ensure_ffmpeg
-
-
-def _load_tracks(url: str, limit: int | None) -> tuple[str, str, list[TrackMeta], str | None]:
-    """Return (kind, spotify_id, tracks, playlist name or None)."""
-    kind, spotify_id = parse_spotify_link(url)
-    if kind == "album":
-        raise ValueError("Album links are not supported yet.")
-    client = SpotifyClient()
-    if kind == "track":
-        return kind, spotify_id, [client.get_track(spotify_id)], None
-    name = client.get_playlist_name(spotify_id)
-    tracks = client.get_playlist_tracks(spotify_id)
-    return kind, spotify_id, (tracks[:limit] if limit else tracks), name
 
 
 def build_download_table(records: Sequence[TrackRecord]) -> Table:
@@ -95,14 +76,13 @@ def download(
     try:
         ensure_ffmpeg()
         settings = load_settings()
-        kind, spotify_id, tracks, playlist_name = _load_tracks(url, limit)
+        loaded = load_tracks(url, limit)
     except (RuntimeError, ValueError, SpotifyConfigError, PlaylistNotAccessible) as exc:
         raise fail(str(exc)) from exc
 
-    base = out or settings.output_dir
-    target = base / safe_filename(playlist_name) if playlist_name else base
-    first = tracks[0] if tracks else None
-    name = playlist_name or (f"{', '.join(first.artists)} - {first.title}" if first else spotify_id)
+    kind, spotify_id, tracks = loaded.kind, loaded.spotify_id, loaded.tracks
+    target = job_target(out or settings.output_dir, loaded.playlist_name)
+    name = job_name(loaded.playlist_name, tracks, spotify_id)
     with get_session() as session:
         job, records = create_job(session, url, kind, spotify_id, name, preset, target, tracks)
         console.print(f"Job {job.id}: {escape(name)} ({len(records)} tracks, preset {preset.value})")

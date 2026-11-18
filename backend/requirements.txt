@@ -5,6 +5,7 @@ mutagen
 rapidfuzz
 fastapi
 uvicorn[standard]
+python-multipart
 sqlmodel
 typer
 rich
