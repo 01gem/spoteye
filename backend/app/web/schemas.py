@@ -106,12 +106,15 @@ class ResumeIn(BaseModel):
 
 
 class Health(BaseModel):
+    app: Literal["spoteye"]  # lets a second launch recognise a running Spoteye
+    frozen: bool
     ffmpeg: bool
     deno: bool
     spotify_auth: TokenStatus
     spotify_auth_expires: UtcDatetime | None  # about 6 months after the last sign-in
     output_dir: str
     yt_dlp_version: str
+    yt_dlp_mode: Literal["binary", "library"]
     cookies: bool
 
 

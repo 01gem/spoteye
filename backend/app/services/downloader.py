@@ -1,7 +1,10 @@
-"""Download one YouTube Music audio stream with yt-dlp (library mode, no postprocessors)."""
+"""Download one YouTube Music audio stream with yt-dlp (no postprocessors): as a library from
+source, as the separate bin/yt-dlp.exe in the packaged app (see ytdlp_bin)."""
 
 from __future__ import annotations
 
+import json
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,8 +12,13 @@ from typing import Any
 import httpx
 import yt_dlp
 
+from app.services import ytdlp_bin
+
 YTM_WATCH_URL: str = "https://music.youtube.com/watch?v={video_id}"
 COVER_TIMEOUT_S: float = 15.0
+DOWNLOAD_TIMEOUT_S: float = 600
+STDERR_TAIL_LINES: int = 20
+AFTER_MOVE_PRINT: str = "after_move:%(.{filepath,format_id,acodec,abr,ext})j"
 
 
 def fetch_cover(url: str | None) -> bytes | None:
@@ -79,16 +87,47 @@ def _float_or_none(value: Any) -> float | None:
         return None
 
 
+def _download_with_exe(exe: Path, url: str, temp_dir: Path, format_selector: str,
+                       cookies_file: str | None) -> dict[str, Any]:  # fmt: skip
+    """Run the yt-dlp program; its last stdout line is the JSON printed after the move."""
+    args = [str(exe), "-f", format_selector, "-o", str(temp_dir / "%(id)s.%(ext)s"),
+            "--no-playlist", "--retries", "5", "--fragment-retries", "5", "--no-simulate",
+            "--no-progress", "--print", AFTER_MOVE_PRINT]  # fmt: skip
+    if cookies_file and Path(cookies_file).is_file():
+        args += ["--cookies", cookies_file]
+    try:
+        result = ytdlp_bin.run([*args, url], DOWNLOAD_TIMEOUT_S)
+    except subprocess.TimeoutExpired as exc:
+        raise DownloadError(f"Download failed for {url}: timed out after {DOWNLOAD_TIMEOUT_S:.0f} s") from exc
+    except OSError as exc:
+        raise DownloadError(f"Download failed for {url}: cannot run {exe}: {exc}") from exc
+    if result.returncode != 0:  # stderr tail keeps yt-dlp's own words for friendly_error
+        tail = "\n".join(result.stderr.strip().splitlines()[-STDERR_TAIL_LINES:])
+        raise DownloadError(f"Download failed for {url}: {tail or f'exit code {result.returncode}'}")
+    lines = result.stdout.strip().splitlines()
+    try:
+        entry = json.loads(lines[-1]) if lines else None
+    except ValueError:
+        entry = None
+    if not isinstance(entry, dict):
+        raise DownloadError(f"Download failed for {url}: yt-dlp printed no file info")
+    return entry
+
+
 def download_audio(
     video_id: str, temp_dir: Path, format_selector: str, cookies_file: str | None
 ) -> DownloadedAudio:
     """Download the selected audio stream for video_id into temp_dir."""
     url = YTM_WATCH_URL.format(video_id=video_id)
-    try:
-        with yt_dlp.YoutubeDL(_build_options(temp_dir, format_selector, cookies_file)) as ydl:
-            info: dict[str, Any] | None = ydl.extract_info(url, download=True)
-    except Exception as exc:
-        raise DownloadError(f"Download failed for {url}: {exc}") from exc
+    if (exe := ytdlp_bin.find()) is not None:
+        info: dict[str, Any] | None = _download_with_exe(exe, url, temp_dir, format_selector,
+                                                         cookies_file)  # fmt: skip
+    else:
+        try:
+            with yt_dlp.YoutubeDL(_build_options(temp_dir, format_selector, cookies_file)) as ydl:
+                info = ydl.extract_info(url, download=True)
+        except Exception as exc:
+            raise DownloadError(f"Download failed for {url}: {exc}") from exc
     if not info:
         raise DownloadError(f"Download failed for {url}: yt-dlp returned no info")
 

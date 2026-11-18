@@ -17,14 +17,14 @@ import requests
 from spotipy.cache_handler import CacheFileHandler
 from spotipy.oauth2 import SpotifyOauthError, SpotifyPKCE
 
-from app.config import BACKEND_DIR, CACHE_PATH, Settings
+from app.config import CACHE_PATH, SIGN_IN_META_PATH, Settings
 from app.services.spotify_client import MISSING_CLIENT_ID_MSG, SCOPE, SpotifyConfigError
 from app.services.spotify_errors import EXPIRED_ERRORS
 
 TokenStatus = Literal["ok", "missing", "expired", "offline"]
 log = logging.getLogger(__name__)
 
-SIGN_IN_META: Path = BACKEND_DIR / ".cache-meta.json"  # {"signed_in_at": ISO UTC}
+SIGN_IN_META: Path = SIGN_IN_META_PATH  # {"signed_in_at": ISO UTC}
 SIGN_IN_DAYS: int = 180
 OK_CACHE_S: float = 300  # a good token is re-checked at most every 5 minutes
 TOKEN_TIMEOUT_S: float = 10
@@ -81,6 +81,12 @@ def token_status(settings: Settings) -> TokenStatus:
     return "ok"
 
 
+def clear_status_cache() -> None:
+    """Forget a cached "ok" so the next token_status call checks again (after a new login)."""
+    global _ok_until
+    _ok_until = 0.0
+
+
 def signed_in_at() -> datetime | None:
     """When the current sign-in happened (from SIGN_IN_META), or None if unknown."""
     try:
@@ -102,7 +108,8 @@ def sign_in_expires_at() -> datetime | None:
 
 
 def login(settings: Settings) -> None:
-    """Interactive sign-in for the CLI only: opens the browser and waits for Spotify's redirect."""
+    """Interactive sign-in (CLI, or the API's background thread): opens the browser and waits
+    for Spotify's redirect on the redirect URI port."""
     if not settings.spotify_client_id:
         raise SpotifyConfigError(MISSING_CLIENT_ID_MSG)
     _auth_manager(settings, open_browser=True).get_access_token(check_cache=False)

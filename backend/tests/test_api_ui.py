@@ -12,13 +12,14 @@ from app import main
 from app.services import spotify_auth
 from app.web import auth
 
-HEALTH_KEYS = {"ffmpeg", "deno", "spotify_auth", "spotify_auth_expires", "output_dir",
-               "yt_dlp_version", "cookies"}  # fmt: skip
+HEALTH_KEYS = {"app", "frozen", "ffmpeg", "deno", "spotify_auth", "spotify_auth_expires",
+               "output_dir", "yt_dlp_version", "yt_dlp_mode", "cookies"}  # fmt: skip
 
 
-def test_health_returns_seven_keys(client: TestClient) -> None:
+def test_health_returns_all_keys(client: TestClient) -> None:
     body = client.get("/api/health").json()
     assert set(body) == HEALTH_KEYS
+    assert (body["app"], body["frozen"], body["yt_dlp_mode"]) == ("spoteye", False, "library")
     assert body["spotify_auth"] == "ok"
 
 
