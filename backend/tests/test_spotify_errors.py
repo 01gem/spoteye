@@ -7,9 +7,11 @@ import logging
 import pytest
 import requests
 from spotipy.exceptions import SpotifyException
+from spotipy.oauth2 import SpotifyOauthError
 
-from app.services.spotify_errors import OFFLINE_MSG, RATE_LIMIT_MSG, is_spotify_unreachable
-from app.services.spotify_errors import log_failure, spotify_error_message
+from app.services.spotify_errors import EXPIRED_MSG, OFFLINE_MSG, RATE_LIMIT_MSG
+from app.services.spotify_errors import is_sign_in_expired, is_spotify_unreachable, log_failure
+from app.services.spotify_errors import spotify_error_message, spotify_error_status
 
 
 def spotify_error(status: int, msg: str = "error") -> SpotifyException:
@@ -54,6 +56,37 @@ def test_chain_is_followed_at_most_five_levels() -> None:
 ])  # fmt: skip
 def test_message(exc: BaseException, message: str) -> None:
     assert spotify_error_message(exc) == message
+
+
+def oauth_error(error: str) -> SpotifyOauthError:
+    return SpotifyOauthError(f"error: {error}", error=error)
+
+
+@pytest.mark.parametrize(("exc", "status", "message"), [
+    (oauth_error("invalid_grant"), 401, EXPIRED_MSG),
+    (oauth_error("invalid_client"), 401, EXPIRED_MSG),
+    (caused_by(oauth_error("invalid_grant")), 401, EXPIRED_MSG),
+    (oauth_error("server_error"), 503, OFFLINE_MSG),
+    (spotify_error(404, "Not found"), 502, "Spotify error 404: Not found"),
+    (spotify_error(429), 503, RATE_LIMIT_MSG),
+    (requests.ConnectionError(), 503, OFFLINE_MSG),
+])  # fmt: skip
+def test_status_and_message(exc: BaseException, status: int, message: str) -> None:
+    assert (spotify_error_status(exc), spotify_error_message(exc)) == (status, message)
+
+
+def test_only_refused_refresh_counts_as_expired() -> None:
+    assert is_sign_in_expired(oauth_error("invalid_grant"))
+    assert not is_sign_in_expired(oauth_error("server_error"))
+    assert not is_sign_in_expired(spotify_error(401))
+
+
+def test_log_failure_expired_sign_in_is_one_warning(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        log_failure(logging.getLogger("test"), oauth_error("invalid_grant"), "Job 3 failed")
+    [record] = caplog.records
+    assert record.levelno == logging.WARNING and record.exc_info is None
+    assert "python cli.py login" in record.getMessage()
 
 
 def test_log_failure_has_no_traceback_for_lost_connection(caplog: pytest.LogCaptureFixture) -> None:

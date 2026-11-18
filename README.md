@@ -171,8 +171,8 @@ Other problems:
 
 - **"Spotify sign-in needed"**: run `python cli.py login` (or `python cli.py info <any spotify url>`)
   once in a terminal. The server never opens a sign-in browser by itself.
-- **"Spotify sign-in expired"**: Spotify ends every sign-in after 6 months. Run
-  `python cli.py login`, then reload the page.
+- **"Spotify sign-in expired"** (red banner, API 401, or the same line from any CLI command):
+  Spotify ends every sign-in after 6 months. Run `python cli.py login`, then reload the page.
 - **"Can't reach Spotify"** (gray notice, API 503, or a one-line CLI error): no connection to
   Spotify right now, or Spotify itself is failing (5xx). Check the internet connection and retry;
   your sign-in is still fine, no login needed. A resumed job that hits this ends as *failed*:

@@ -19,6 +19,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from spotipy.exceptions import SpotifyException
+from spotipy.oauth2 import SpotifyOauthError
 from sqlmodel import col, select
 from yt_dlp.version import __version__ as YT_DLP_VERSION
 
@@ -27,7 +28,7 @@ from app.db import get_session, init_db
 from app.models import Job, now
 from app.services.presets import PRESET_SPECS
 from app.services.spotify_auth import sign_in_expires_at
-from app.services.spotify_errors import is_spotify_unreachable, spotify_error_message
+from app.services.spotify_errors import spotify_error_message, spotify_error_status
 from app.web import api_files, api_jobs, api_stream, api_tracks, auth
 from app.web.events import EventBus
 from app.web.job_queue import JobQueue
@@ -77,18 +78,18 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 
 
 async def spotify_error(request: Request, exc: Exception) -> JSONResponse:
-    """503 when Spotify is unreachable or rate-limiting, 502 for its other errors (no traceback).
+    """401 expired sign-in, 502 Spotify's own errors, 503 unreachable/rate-limited (no traceback).
 
     Also catches errors re-raised from run_in_threadpool, so every endpoint is covered.
     """
-    unreachable = is_spotify_unreachable(exc) or not isinstance(exc, SpotifyException)
     log.warning("%s %s: Spotify request failed (%s): %s", request.method, request.url.path,
                 type(exc).__name__, exc)  # fmt: skip
-    return JSONResponse({"detail": spotify_error_message(exc)}, status_code=503 if unreachable else 502)
+    return JSONResponse({"detail": spotify_error_message(exc)}, status_code=spotify_error_status(exc))
 
 
 app.add_exception_handler(requests.RequestException, spotify_error)
 app.add_exception_handler(SpotifyException, spotify_error)
+app.add_exception_handler(SpotifyOauthError, spotify_error)  # refresh refused within the "ok" cache
 app.include_router(api_jobs.router)
 app.include_router(api_stream.router)
 app.include_router(api_files.router)

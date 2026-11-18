@@ -9,13 +9,14 @@ import pytest
 import requests
 from fastapi.testclient import TestClient
 from spotipy.exceptions import SpotifyException
+from spotipy.oauth2 import SpotifyOauthError
 from test_api import PLAYLIST_URL, FakeSpotify, add_job, client, env  # noqa: F401
 from typer.testing import CliRunner
 
 from app.commands import app as cli
 from app.commands import attach, info, match
 from app.services.spotify_client import TrackMeta
-from app.services.spotify_errors import OFFLINE_MSG, RATE_LIMIT_MSG
+from app.services.spotify_errors import EXPIRED_MSG, OFFLINE_MSG, RATE_LIMIT_MSG
 from app.web import auth, job_queue
 
 TRACK_URL = "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"
@@ -38,6 +39,7 @@ def raising(error: Exception) -> type[FakeSpotify]:
     (requests.ConnectionError("no network"), 503, OFFLINE_MSG),
     (SpotifyException(429, -1, "too many requests"), 503, RATE_LIMIT_MSG),
     (SpotifyException(404, -1, "Not found"), 502, "Spotify error 404: Not found"),
+    (SpotifyOauthError("refused", error="invalid_grant"), 401, EXPIRED_MSG),
 ])  # fmt: skip
 def test_resolve_maps_spotify_errors(client: TestClient, monkeypatch: pytest.MonkeyPatch,
                                      error: Exception, status: int, detail: str) -> None:  # fmt: skip
@@ -94,3 +96,13 @@ def test_cli_prints_offline_message(module: object, args: list[str], tmp_path: P
     result = CliRunner().invoke(cli, args)
     assert result.exit_code == 1
     assert OFFLINE_MSG in " ".join(result.output.split())
+
+
+def test_cli_prints_login_hint_for_expired_sign_in(tmp_path: Path,
+                                                   monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "cli.db"))
+    monkeypatch.setattr(info, "SpotifyClient", raising(SpotifyOauthError("refused", error="invalid_grant")))
+    result = CliRunner().invoke(cli, ["info", TRACK_URL])
+    assert result.exit_code == 1
+    assert "Run: python cli.py login" in " ".join(result.output.split())
+    assert "Traceback" not in result.output

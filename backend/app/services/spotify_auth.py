@@ -19,9 +19,9 @@ from spotipy.oauth2 import SpotifyOauthError, SpotifyPKCE
 
 from app.config import BACKEND_DIR, CACHE_PATH, Settings
 from app.services.spotify_client import MISSING_CLIENT_ID_MSG, SCOPE, SpotifyConfigError
+from app.services.spotify_errors import EXPIRED_ERRORS
 
 TokenStatus = Literal["ok", "missing", "expired", "offline"]
-EXPIRED_ERRORS: frozenset[str] = frozenset({"invalid_grant", "invalid_client"})  # Spotify refused
 log = logging.getLogger(__name__)
 
 SIGN_IN_META: Path = BACKEND_DIR / ".cache-meta.json"  # {"signed_in_at": ISO UTC}
