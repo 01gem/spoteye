@@ -1,8 +1,8 @@
-"""Resolve links and manage jobs: create, list, detail, resume, missing."""
+"""Resolve links and manage jobs: create, list, detail, resume, stop, delete."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from sqlmodel import Session, col, select
 
@@ -11,14 +11,12 @@ from app.db import get_session
 from app.models import Job
 from app.services.job_runner import create_job
 from app.services.job_setup import LoadedTracks, job_name, job_target, load_tracks
-from app.services.job_state import job_records
-from app.services.reports import MISSING_STATUSES
+from app.services.job_state import delete_job, job_records
 from app.services.spotify_client import PlaylistNotAccessible, SpotifyConfigError
 from app.web import auth
 from app.web.job_queue import JobQueue
-from app.web.schemas import JobCreated, JobDetail, JobIn, JobSummary, RecordOut, Resolved
-from app.web.schemas import ResolvedTrack, ResolveIn, ResumeIn, job_detail, job_summary
-from app.web.schemas import record_out
+from app.web.schemas import JobCreated, JobDetail, JobIn, JobSummary, Resolved, ResolvedTrack
+from app.web.schemas import ResolveIn, ResumeIn, StopOut, job_detail, job_summary
 
 router = APIRouter(prefix="/api")
 BUSY_STATUSES: frozenset[str] = frozenset({"queued", "running"})
@@ -121,8 +119,22 @@ def resume(job_id: int, request: Request, body: ResumeIn | None = None) -> JobCr
     return JobCreated(job_id=job_id)
 
 
-@router.get("/jobs/{job_id}/missing", response_model=list[RecordOut])
-def missing(job_id: int) -> list[RecordOut]:
+@router.post("/jobs/{job_id}/stop", status_code=202, response_model=StopOut)
+def stop(job_id: int, request: Request) -> StopOut:
     with get_session() as session:
         get_job_or_404(session, job_id)
-        return [record_out(r) for r in job_records(session, job_id) if r.status in MISSING_STATUSES]
+    result = job_queue(request).stop(job_id)
+    if result is None:
+        raise HTTPException(status_code=409, detail=f"Job {job_id} is not queued or running.")
+    return StopOut(result=result)
+
+
+@router.delete("/jobs/{job_id}", status_code=204, response_class=Response)
+def delete(job_id: int, request: Request) -> Response:
+    """Forget the job and its track list; files and the match cache stay."""
+    with get_session() as session:
+        job = get_job_or_404(session, job_id)
+        if is_busy(request, job):
+            raise HTTPException(status_code=409, detail=f"Job {job_id} is {job.status}; stop it first.")
+        delete_job(session, job)
+    return Response(status_code=204)

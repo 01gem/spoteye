@@ -6,13 +6,13 @@ import logging
 import queue
 import threading
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 from app.config import load_settings
 from app.db import get_session
 from app.models import Job, TrackRecord, now
 from app.services.job_runner import resume_job, run_job
-from app.services.job_state import job_records
+from app.services.job_state import JobStopped, job_records
 from app.services.matcher import Matcher
 from app.services.spotify_client import SpotifyClient, TrackMeta
 from app.web import auth
@@ -21,6 +21,7 @@ from app.web.events import EventBus, job_event, record_event
 log = logging.getLogger(__name__)
 
 Task = tuple[int, str, dict[str, Any]]  # (job_id, "new" | "resume", options)
+StopResult = Literal["cancelled", "stopping"]
 
 
 class JobQueue:
@@ -31,6 +32,8 @@ class JobQueue:
         self.run_options = run_options
         self._tasks: queue.Queue[Task | None] = queue.Queue()
         self._active: set[int] = set()
+        self._waiting: set[int] = set()  # submitted, not yet picked up by the worker
+        self._events: dict[int, threading.Event] = {}  # set = stop requested
         self._lock = threading.Lock()
         self._thread = threading.Thread(target=self._loop, name="spoteye-jobs", daemon=True)
         self._thread.start()
@@ -45,6 +48,15 @@ class JobQueue:
         with self._lock:
             return job_id in self._active
 
+    def stop(self, job_id: int) -> StopResult | None:
+        """Cancel a waiting job, ask a running one to stop, or None if it is neither."""
+        with self._lock:
+            event = self._events.get(job_id)
+            if event is None:
+                return None
+            event.set()
+            return "cancelled" if job_id in self._waiting else "stopping"
+
     def shutdown(self) -> None:
         """Stop after the current job; a job cut off here is marked "stopped" on next startup."""
         self._tasks.put(None)
@@ -53,6 +65,8 @@ class JobQueue:
     def _submit(self, job_id: int, kind: str, options: dict[str, Any]) -> None:
         with self._lock:
             self._active.add(job_id)
+            self._waiting.add(job_id)
+            self._events[job_id] = threading.Event()
         self._set_status(job_id, "queued", finished=False)
         self._tasks.put((job_id, kind, options))
 
@@ -64,7 +78,13 @@ class JobQueue:
             job.status, job.finished_at = status, (now() if finished else None)
             session.add(job)
             session.commit()
-            self.bus.publish(job_id, job_event(job, job_records(session, job_id)))
+        self._publish(job_id)
+
+    def _publish(self, job_id: int) -> None:
+        with get_session() as session:
+            job = session.get(Job, job_id)
+            if job is not None:
+                self.bus.publish(job_id, job_event(job, job_records(session, job_id)))
 
     def _loop(self) -> None:
         while True:
@@ -72,8 +92,17 @@ class JobQueue:
             if task is None:
                 return
             job_id, kind, options = task
+            with self._lock:
+                self._waiting.discard(job_id)
+                event = self._events.setdefault(job_id, threading.Event())
+                cancelled = event.is_set()
             try:
-                self._run(job_id, kind, options)
+                if cancelled:
+                    self._set_status(job_id, "stopped", finished=True)  # never ran
+                else:
+                    self._run(job_id, kind, options, event)
+            except JobStopped:
+                self._publish(job_id)  # run_job already saved "stopped"
             except Exception:
                 log.exception("Job %s crashed", job_id)
                 try:
@@ -83,15 +112,17 @@ class JobQueue:
             finally:
                 with self._lock:
                     self._active.discard(job_id)
+                    self._events.pop(job_id, None)
 
-    def _run(self, job_id: int, kind: str, options: dict[str, Any]) -> None:
+    def _run(self, job_id: int, kind: str, options: dict[str, Any], stop: threading.Event) -> None:
         def on_record(record: TrackRecord) -> None:
             self.bus.publish(job_id, record_event(record))
 
         def on_job(job: Job, records: list[TrackRecord]) -> None:
             self.bus.publish(job_id, job_event(job, records))
 
-        callbacks: dict[str, Any] = {"on_record": on_record, "on_job": on_job, **self.run_options}
+        callbacks: dict[str, Any] = {"on_record": on_record, "on_job": on_job,
+                                     "should_stop": stop.is_set, **self.run_options}  # fmt: skip
         settings = load_settings()
         with get_session() as session:
             job = session.get(Job, job_id)

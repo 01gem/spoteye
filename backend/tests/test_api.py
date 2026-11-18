@@ -98,9 +98,9 @@ def add_job(status: str, out_dir: Path) -> int:
         return job.id
 
 
-def test_health_returns_four_keys(client: TestClient) -> None:
+def test_health_returns_six_keys(client: TestClient) -> None:
     body = client.get("/api/health").json()
-    assert set(body) == {"ffmpeg", "deno", "spotify_auth", "output_dir"}
+    assert set(body) == {"ffmpeg", "deno", "spotify_auth", "output_dir", "yt_dlp_version", "cookies"}
     assert body["spotify_auth"] is True
 
 

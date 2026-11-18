@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 
 from sqlmodel import Session, col, select
@@ -11,6 +12,7 @@ from app.services.pipeline import TrackResult
 from app.services.reports import write_reports
 
 KEPT_STATUSES: frozenset[str] = frozenset({"done", "skipped", "manual"})
+StopFn = Callable[[], bool]
 
 
 class JobStopped(Exception):
@@ -19,6 +21,18 @@ class JobStopped(Exception):
     def __init__(self, job_id: int) -> None:
         super().__init__(f"Job {job_id} stopped")
         self.job_id = job_id
+
+
+class StopRequested(Exception):
+    """should_stop() returned True: run_job handles it exactly like Ctrl+C."""
+
+
+def until_stopped[T](items: Iterable[T], should_stop: StopFn | None) -> Iterator[T]:
+    """Yield items until should_stop() is true, then end quietly (the caller checks again)."""
+    for item in items:
+        if should_stop is not None and should_stop():
+            return
+        yield item
 
 
 def job_records(session: Session, job_id: int) -> list[TrackRecord]:
@@ -60,6 +74,15 @@ def finish_job(session: Session, job: Job) -> list[TrackRecord]:
     if job.kind == "playlist" and newer_job_for_folder(session, job) is None:
         write_reports(job, records, Path(job.out_dir))
     return records
+
+
+def delete_job(session: Session, job: Job) -> None:
+    """Forget a job: its TrackRecords and the Job row. Never files, never MatchCache."""
+    assert job.id is not None
+    for record in job_records(session, job.id):
+        session.delete(record)
+    session.delete(job)
+    session.commit()
 
 
 def stop_job(session: Session, job: Job) -> bool:

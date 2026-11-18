@@ -7,18 +7,21 @@ from __future__ import annotations
 
 import shutil
 from collections.abc import AsyncIterator
+from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlmodel import col, select
+from yt_dlp.version import __version__ as YT_DLP_VERSION
 
-from app.config import load_settings
+from app.config import FRONTEND_DIST, load_settings
 from app.db import get_session, init_db
 from app.models import Job, now
 from app.services.presets import PRESET_SPECS
-from app.web import api_files, api_jobs, api_stream, auth
+from app.web import api_files, api_jobs, api_stream, api_tracks, auth
 from app.web.events import EventBus
 from app.web.job_queue import JobQueue
 from app.web.schemas import Health, PresetOut
@@ -61,18 +64,33 @@ app.add_middleware(
 app.include_router(api_jobs.router)
 app.include_router(api_stream.router)
 app.include_router(api_files.router)
+app.include_router(api_tracks.router)
 
 
 @app.get("/api/health", response_model=Health)
 def health() -> Health:
+    settings = load_settings()
     return Health(
         ffmpeg=shutil.which("ffmpeg") is not None,
         deno=shutil.which("deno") is not None,
         spotify_auth=auth.has_spotify_token(),
-        output_dir=str(load_settings().output_dir),
+        output_dir=str(settings.output_dir),
+        yt_dlp_version=YT_DLP_VERSION,
+        cookies=settings.cookies_file is not None and settings.cookies_file.is_file(),
     )
 
 
 @app.get("/api/presets", response_model=list[PresetOut])
 def presets() -> list[PresetOut]:
     return [PresetOut(value=preset.value, label=spec.label) for preset, spec in PRESET_SPECS.items()]
+
+
+def mount_ui(target: FastAPI, dist: Path) -> bool:
+    """Serve the built frontend at "/" (mounted after every /api route). False if not built."""
+    if not (dist / "index.html").is_file():
+        return False
+    target.mount("/", StaticFiles(directory=dist, html=True), name="ui")
+    return True
+
+
+mount_ui(app, FRONTEND_DIST)  # must stay last: "/" would shadow routes added after it

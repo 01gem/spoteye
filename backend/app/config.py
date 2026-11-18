@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 BACKEND_DIR: Path = Path(__file__).resolve().parent.parent
 ENV_PATH: Path = BACKEND_DIR / ".env"
 CACHE_PATH: Path = BACKEND_DIR / ".cache"
+FRONTEND_DIST: Path = BACKEND_DIR.parent / "frontend" / "dist"
 
 DEFAULT_REDIRECT_URI: str = "http://127.0.0.1:8765/callback"
 DEFAULT_OUTPUT_DIR: str = r"D:\Music\Spoteye"

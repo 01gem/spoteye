@@ -55,4 +55,4 @@ def main() -> None:
 
 
 # Import order = order in --help. Must come after `app` exists.
-from app.commands import info, match, download, jobs, attach  # noqa: E402,F401,I001
+from app.commands import info, match, download, jobs, attach, serve  # noqa: E402,F401,I001

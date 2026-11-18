@@ -1,6 +1,6 @@
 """Run download jobs: skip existing files, match (cached), download concurrently, record results.
 
-All database writes happen in the main thread (here and in job_state). Ctrl+C -> job "stopped".
+All database writes happen in the main thread (here and in job_state). Ctrl+C or should_stop() -> "stopped".
 """
 
 from __future__ import annotations
@@ -14,7 +14,8 @@ from sqlmodel import Session
 
 from app.config import Settings
 from app.models import Job, TrackRecord
-from app.services.job_state import JobStopped, finish_job, job_records, save_result, stop_job
+from app.services.job_state import JobStopped, StopFn, StopRequested, finish_job, job_records
+from app.services.job_state import save_result, stop_job, until_stopped
 from app.services.matcher import Matcher
 from app.services.pipeline import TrackResult, WorkItem, Worker, cleanup_tmp, download_all
 from app.services.pipeline import download_track, existing_output, match_all
@@ -61,10 +62,11 @@ def run_job(
     max_workers: int | None = None, progress: ProgressFn = no_progress,
     worker: Worker = download_track, sleep: Callable[[float], None] = time.sleep,
     on_record: OnRecord | None = None, on_job: OnJob | None = None,
+    should_stop: StopFn | None = None,
 ) -> list[TrackRecord]:  # fmt: skip
     """Process the given records of a job and return all of its records afterwards.
 
-    Ctrl+C: the job is saved as "stopped" and JobStopped is raised (resume picks it up).
+    Ctrl+C or should_stop(): the job is saved as "stopped" and JobStopped is raised.
     on_record runs after every saved result, on_job at the start and after finish_job.
     """
     preset, out_dir = Preset(job.preset), Path(job.out_dir)
@@ -85,7 +87,10 @@ def run_job(
                 to_match.append((record, track))
 
         tracks = [track for _, track in to_match]
-        matches = match_all(progress(tracks, "Matching...", len(tracks)), matcher, session, rematch)
+        pending = until_stopped(tracks, should_stop)
+        matches = match_all(progress(pending, "Matching...", len(tracks)), matcher, session, rematch)
+        if should_stop is not None and should_stop():
+            raise StopRequested
         items: list[WorkItem] = []
         by_key: dict[int, TrackRecord] = {}
         for record, track in to_match:
@@ -112,7 +117,10 @@ def run_job(
             save_result(session, by_key[item.key], result)
             if on_record is not None:
                 on_record(by_key[item.key])
-    except KeyboardInterrupt:
+            if should_stop is not None and should_stop():
+                results.close()  # its finally drops queued tracks and waits for running ones
+                raise StopRequested
+    except (KeyboardInterrupt, StopRequested):
         session.rollback()  # an interrupted commit must not poison the session
         stop_job(session, job)
         assert job.id is not None
@@ -129,7 +137,7 @@ def resume_job(
     session: Session, job: Job, client: TrackFetcher, matcher: Matcher, settings: Settings,
     *, accept_review: bool, **options: Any,
 ) -> list[TrackRecord]:  # fmt: skip
-    """Re-process pending/failed records (and review_skipped with accept_review)."""
+    """Re-run pending/failed records (+ review_skipped if accept_review); options go to run_job."""
     assert job.id is not None
     wanted = {"pending", "failed"} | ({"review_skipped"} if accept_review else set())
     records = [r for r in job_records(session, job.id) if r.status in wanted]

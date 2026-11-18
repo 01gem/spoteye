@@ -1,4 +1,4 @@
-"""Job history commands: `jobs`, `job`, `resume`, `stop`, `missing`."""
+"""Job history commands: `jobs`, `job`, `resume`, `stop`, `missing`, `forget`."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from app.db import get_session
 from app.models import Job, to_local
 from app.services.job_runner import resume_job
 from app.services.job_state import KEPT_STATUSES, JobStopped, job_records
-from app.services.job_state import newer_job_for_folder, stop_job
+from app.services.job_state import delete_job, newer_job_for_folder, stop_job
 from app.services.matcher import Matcher
 from app.services.reports import missing_lines
 from app.services.spotify_client import SpotifyClient, SpotifyConfigError
@@ -125,3 +125,15 @@ def missing(job_id: int = typer.Argument(..., help="Job id (see `jobs`).")) -> N
         console.print("[green]Nothing missing.[/green]")
     for line in lines:
         console.print(line, markup=False, highlight=False)
+
+
+@app.command()
+def forget(job_id: int = typer.Argument(..., help="Job id (see `jobs`).")) -> None:
+    """Remove a job and its track list from the history. Files and the match cache stay."""
+    with get_session() as session:
+        found = _get_job(session, job_id)
+        if found.status in ("queued", "running"):
+            raise fail(f"Job {job_id} is {found.status}; stop it first: python cli.py stop {job_id}")
+        out_dir = found.out_dir
+        delete_job(session, found)
+    console.print(f"Job {job_id} forgotten. Files in {escape(out_dir)} were not touched.")

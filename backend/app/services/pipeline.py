@@ -5,12 +5,13 @@ Workers never touch the database: they receive plain values and return a TrackRe
 
 from __future__ import annotations
 
+import logging
 import os
 import random
 import shutil
 import tempfile
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,7 @@ from sqlmodel import Session
 from app.config import Settings
 from app.models import MatchCache, now
 from app.services.downloader import download_audio, fetch_cover
+from app.services.errors import friendly_error
 from app.services.filenames import build_filename, existing_output
 from app.services.matcher import Matcher
 from app.services.presets import PRESET_SPECS, Preset, describe_output, describe_source
@@ -34,6 +36,7 @@ __all__ = ["TrackResult", "WorkItem", "Worker", "existing_output", "fetch_cover"
 
 Status = Literal["done", "skipped", "not_found", "review_skipped", "failed"]
 TMP_DIR_NAME: str = ".spoteye_tmp"
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -102,7 +105,8 @@ def download_track(item: WorkItem, preset: Preset, out_dir: Path, settings: Sett
             output=describe_output(plan), upscaled=plan.upscaled,
         )  # fmt: skip
     except Exception as exc:
-        return TrackResult(track, "failed", error=str(exc) or type(exc).__name__)
+        log.exception("Download failed: %s - %s", track.spotify_id, track.title)
+        return TrackResult(track, "failed", error=friendly_error(str(exc) or type(exc).__name__))
     finally:
         if tmp_dir is not None:
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -116,7 +120,7 @@ def download_all(
     max_workers: int,
     worker: Worker = download_track,
     sleep: Callable[[float], None] = time.sleep,
-) -> Iterator[tuple[WorkItem, TrackResult]]:
+) -> Generator[tuple[WorkItem, TrackResult]]:
     """Phase 2: run worker concurrently and yield (item, result) as each finishes."""
 
     def run(item: WorkItem) -> TrackResult:

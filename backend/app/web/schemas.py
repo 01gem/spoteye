@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, PlainSerializer
 
@@ -96,6 +96,10 @@ class JobDetail(JobSummary):
     records: list[RecordOut]
 
 
+class StopOut(BaseModel):
+    result: Literal["cancelled", "stopping"]
+
+
 class ResumeIn(BaseModel):
     accept_review: bool = False
 
@@ -105,6 +109,8 @@ class Health(BaseModel):
     deno: bool
     spotify_auth: bool
     output_dir: str
+    yt_dlp_version: str
+    cookies: bool
 
 
 def record_out(record: TrackRecord) -> RecordOut:

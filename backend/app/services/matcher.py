@@ -103,8 +103,10 @@ class Matcher:
     """Find the best YouTube Music song for a Spotify track."""
 
     def __init__(
-        self, yt: YTMusic | None = None, sleep: Callable[[float], None] = time.sleep
-    ) -> None:
+        self, yt: YTMusic | None = None, sleep: Callable[[float], None] = time.sleep,
+        top_n: int = TOP_N,
+    ) -> None:  # fmt: skip
+        self.top_n = top_n
         self.yt: YTMusic = yt if yt is not None else YTMusic()
         self._sleep = sleep
 
@@ -143,5 +145,5 @@ class Matcher:
             return MatchResult(status="not_found", best=None, score=0.0)
         best, score = scored[0]
         return MatchResult(
-            status=_status_for(score), best=best, score=score, candidates=scored[:TOP_N]
+            status=_status_for(score), best=best, score=score, candidates=scored[: self.top_n]
         )
