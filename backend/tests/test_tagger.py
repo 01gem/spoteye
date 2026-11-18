@@ -8,10 +8,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from mutagen.flac import Picture
+from mutagen.flac import FLAC, Picture
 from mutagen.id3 import ID3
 from mutagen.mp4 import MP4
 from mutagen.oggopus import OggOpus
+from mutagen.oggvorbis import OggVorbis
 
 from app.services.spotify_client import TrackMeta
 from app.services.tagger import MP4_ISRC_KEY, tag_file
@@ -23,6 +24,8 @@ ENCODERS: dict[str, list[str]] = {
     "mp3": ["-c:a", "libmp3lame", "-b:a", "128k"],
     "m4a": ["-c:a", "aac", "-b:a", "128k"],
     "opus": ["-c:a", "libopus", "-b:a", "64k"],
+    "ogg": ["-c:a", "libvorbis", "-q:a", "2"],
+    "flac": ["-c:a", "flac"],
 }
 TRACK = TrackMeta(
     spotify_id="id",
@@ -60,12 +63,15 @@ def _read_back(path: Path) -> tuple[str, str, str, bytes]:
         assert tags is not None
         return (tags["\xa9nam"][0], tags["\xa9ART"][0], bytes(tags[MP4_ISRC_KEY][0]).decode(),
                 bytes(tags["covr"][0]))  # fmt: skip
-    audio = OggOpus(path)
+    if ext == ".flac":
+        flac = FLAC(path)
+        return flac["title"][0], flac["artist"][0], flac["isrc"][0], flac.pictures[0].data
+    audio = OggOpus(path) if ext == ".opus" else OggVorbis(path)
     picture = Picture(base64.b64decode(audio["metadata_block_picture"][0]))
     return audio["title"][0], audio["artist"][0], audio["isrc"][0], picture.data
 
 
-@pytest.mark.parametrize("ext", ["mp3", "m4a", "opus"])
+@pytest.mark.parametrize("ext", ["mp3", "m4a", "opus", "ogg", "flac"])
 def test_tag_round_trip(tmp_path: Path, ext: str) -> None:
     audio_path = tmp_path / f"silence.{ext}"
     _ffmpeg("-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "2",
@@ -83,4 +89,4 @@ def test_tag_round_trip(tmp_path: Path, ext: str) -> None:
 
 def test_unsupported_extension_raises(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
-        tag_file(tmp_path / "song.flac", TRACK, None)
+        tag_file(tmp_path / "song.wav", TRACK, None)

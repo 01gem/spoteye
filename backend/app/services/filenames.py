@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
+from app.services.presets import Preset, possible_exts
 from app.services.spotify_client import TrackMeta
 
 _ILLEGAL = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
@@ -32,3 +34,12 @@ def build_filename(track: TrackMeta, ext: str, index: int | None) -> str:
     if index is not None:
         stem = f"{index:02d} - {stem}"
     return f"{safe_filename(stem, max_len=MAX_FILENAME_LEN - len(ext) - 1)}.{ext}"
+
+
+def existing_output(track: TrackMeta, preset: Preset, out_dir: Path, index: int | None) -> Path | None:
+    """The already-downloaded file for this track under any extension the preset can produce."""
+    for ext in possible_exts(preset):
+        candidate = out_dir / build_filename(track, ext, index)
+        if candidate.exists():
+            return candidate
+    return None

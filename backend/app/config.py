@@ -14,6 +14,8 @@ CACHE_PATH: Path = BACKEND_DIR / ".cache"
 
 DEFAULT_REDIRECT_URI: str = "http://127.0.0.1:8765/callback"
 DEFAULT_OUTPUT_DIR: str = r"D:\Music\Spoteye"
+DEFAULT_DB_PATH: Path = BACKEND_DIR / "spoteye.db"
+DEFAULT_MAX_WORKERS: int = 3
 
 
 @dataclass(frozen=True)
@@ -22,12 +24,28 @@ class Settings:
     spotify_redirect_uri: str
     output_dir: Path
     cookies_file: Path | None
+    db_path: Path = DEFAULT_DB_PATH
+    max_workers: int = DEFAULT_MAX_WORKERS
 
 
 def _optional_path(value: str | None) -> Path | None:
     if value is None or not value.strip():
         return None
     return Path(value.strip())
+
+
+def _db_path(value: str | None) -> Path:
+    """DB_PATH from the env; relative paths are resolved against backend/."""
+    path = _optional_path(value) or DEFAULT_DB_PATH
+    return path if path.is_absolute() else BACKEND_DIR / path
+
+
+def _positive_int(value: str | None, default: int) -> int:
+    try:
+        number = int((value or "").strip())
+    except ValueError:
+        return default
+    return number if number > 0 else default
 
 
 def load_settings(env_path: Path = ENV_PATH) -> Settings:
@@ -39,4 +57,6 @@ def load_settings(env_path: Path = ENV_PATH) -> Settings:
         or DEFAULT_REDIRECT_URI,
         output_dir=Path(os.getenv("OUTPUT_DIR", "").strip() or DEFAULT_OUTPUT_DIR),
         cookies_file=_optional_path(os.getenv("COOKIES_FILE")),
+        db_path=_db_path(os.getenv("DB_PATH")),
+        max_workers=_positive_int(os.getenv("MAX_WORKERS"), DEFAULT_MAX_WORKERS),
     )

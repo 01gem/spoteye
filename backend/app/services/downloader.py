@@ -6,9 +6,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
 import yt_dlp
 
 YTM_WATCH_URL: str = "https://music.youtube.com/watch?v={video_id}"
+COVER_TIMEOUT_S: float = 15.0
+
+
+def fetch_cover(url: str | None) -> bytes | None:
+    """Download cover art; any failure just means no cover."""
+    if not url:
+        return None
+    try:
+        response = httpx.get(url, timeout=COVER_TIMEOUT_S, follow_redirects=True)
+        response.raise_for_status()
+        return response.content
+    except httpx.HTTPError:
+        return None
 
 
 class DownloadError(Exception):

@@ -1,35 +1,38 @@
-"""Per-track pipeline: match -> download -> transcode -> tag (sequential in M3)."""
+"""Two phases: sequential cached matching (main thread), then concurrent download/transcode/tag.
+
+Workers never touch the database: they receive plain values and return a TrackResult.
+"""
 
 from __future__ import annotations
 
+import random
 import shutil
 import tempfile
+import time
+from collections.abc import Callable, Iterable, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-import httpx
+from sqlmodel import Session
 
 from app.config import Settings
-from app.services.downloader import download_audio
-from app.services.filenames import build_filename
+from app.models import MatchCache, now
+from app.services.downloader import download_audio, fetch_cover
+from app.services.filenames import build_filename, existing_output
 from app.services.matcher import Matcher
-from app.services.presets import (
-    PRESET_SPECS,
-    Preset,
-    describe_output,
-    describe_source,
-    plan_output,
-    possible_exts,
-)
+from app.services.presets import PRESET_SPECS, Preset, describe_output, describe_source
+from app.services.presets import plan_output
 from app.services.spotify_client import TrackMeta
 from app.services.tagger import tag_file
 from app.services.transcoder import transcode
 
-Status = Literal["done", "skipped", "not_found", "review_skipped", "failed"]
+__all__ = ["TrackResult", "WorkItem", "Worker", "existing_output", "fetch_cover", "match_all",
+           "download_track", "download_all", "cleanup_tmp"]  # fmt: skip
 
+Status = Literal["done", "skipped", "not_found", "review_skipped", "failed"]
 TMP_DIR_NAME: str = ".spoteye_tmp"
-COVER_TIMEOUT_S: float = 15.0
 
 
 @dataclass
@@ -43,79 +46,98 @@ class TrackResult:
     error: str | None = None
 
 
-def fetch_cover(url: str | None) -> bytes | None:
-    """Download cover art; any failure just means no cover."""
-    if not url:
-        return None
-    try:
-        response = httpx.get(url, timeout=COVER_TIMEOUT_S, follow_redirects=True)
-        response.raise_for_status()
-        return response.content
-    except httpx.HTTPError:
-        return None
+@dataclass(frozen=True)
+class WorkItem:
+    key: int  # caller's id for this track (TrackRecord.id)
+    track: TrackMeta
+    video_id: str
+    index: int | None  # number in the file name (playlists only)
 
 
-def _existing_output(track: TrackMeta, preset: Preset, out_dir: Path, index: int | None) -> Path | None:
-    for ext in possible_exts(preset):
-        candidate = out_dir / build_filename(track, ext, index)
-        if candidate.exists():
-            return candidate
-    return None
+Worker = Callable[[WorkItem, Preset, Path, Settings], TrackResult]
 
 
-def process_track(
-    track: TrackMeta,
-    preset: Preset,
-    out_dir: Path,
-    matcher: Matcher,
-    settings: Settings,
-    index: int | None,
-    accept_review: bool,
-) -> TrackResult:
-    """Produce one tagged audio file for track in out_dir. Never raises for per-track errors."""
-    existing = _existing_output(track, preset, out_dir, index)
-    if existing is not None:
-        return TrackResult(track, "skipped", path=existing)
+def match_all(
+    tracks: Iterable[TrackMeta], matcher: Matcher, session: Session, rematch: bool = False
+) -> dict[str, MatchCache]:
+    """Phase 1: match each track, using and filling MatchCache (bypassed when rematch)."""
+    results: dict[str, MatchCache] = {}
+    for track in tracks:
+        cached = None if rematch else session.get(MatchCache, track.spotify_id)
+        if cached is None:
+            result = matcher.match(track)
+            cached = MatchCache(
+                spotify_id=track.spotify_id, video_id=result.best.video_id if result.best else None,
+                score=result.score, status=result.status, matched_at=now(),
+            )  # fmt: skip
+            if result.best is not None:  # no candidates at all may be a network error: don't cache
+                cached = session.merge(cached)
+                session.commit()
+        results[track.spotify_id] = cached
+    return results
 
-    match = matcher.match(track)
-    if match.status == "not_found" or match.best is None:
-        return TrackResult(track, "not_found")
-    if match.status == "review" and not accept_review:
-        return TrackResult(track, "review_skipped")
 
-    tmp_root = out_dir / TMP_DIR_NAME
+def download_track(item: WorkItem, preset: Preset, out_dir: Path, settings: Settings) -> TrackResult:
+    """Download -> transcode -> cover -> tag one matched track (same steps as M3)."""
+    track = item.track
     tmp_dir: Path | None = None
     final: Path | None = None
     try:
+        tmp_root = out_dir / TMP_DIR_NAME
         tmp_root.mkdir(parents=True, exist_ok=True)
         tmp_dir = Path(tempfile.mkdtemp(dir=tmp_root))
         cookies = str(settings.cookies_file) if settings.cookies_file else None
-        audio = download_audio(
-            match.best.video_id, tmp_dir, PRESET_SPECS[preset].format_selector, cookies
-        )
+        selector = PRESET_SPECS[preset].format_selector
+        audio = download_audio(item.video_id, tmp_dir, selector, cookies)
         plan = plan_output(preset, audio.acodec, audio.abr)
-        final = out_dir / build_filename(track, plan.ext, index)
+        final = out_dir / build_filename(track, plan.ext, item.index)
         transcode(audio.path, final, plan.ffmpeg_args)
         tag_file(final, track, fetch_cover(track.cover_url))
         return TrackResult(
-            track,
-            "done",
-            path=final,
-            source=describe_source(audio.acodec, audio.abr),
-            output=describe_output(plan),
-            upscaled=plan.upscaled,
-        )
-    except BaseException as exc:
-        # Never leave a half-written file behind: the next run would "skip" it.
-        if final is not None:
+            track, "done", path=final, source=describe_source(audio.acodec, audio.abr),
+            output=describe_output(plan), upscaled=plan.upscaled,
+        )  # fmt: skip
+    except Exception as exc:
+        if final is not None:  # never leave a half-written file: the next run would skip it
             final.unlink(missing_ok=True)
-        if not isinstance(exc, Exception):
-            raise
         return TrackResult(track, "failed", error=str(exc) or type(exc).__name__)
     finally:
         if tmp_dir is not None:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-        try:
-            tmp_root.rmdir()  # only succeeds once empty
-        except OSError:
-            pass
+
+
+def download_all(
+    items: list[WorkItem],
+    preset: Preset,
+    out_dir: Path,
+    settings: Settings,
+    max_workers: int,
+    worker: Worker = download_track,
+    sleep: Callable[[float], None] = time.sleep,
+) -> Iterator[tuple[WorkItem, TrackResult]]:
+    """Phase 2: run worker concurrently and yield (item, result) as each finishes."""
+
+    def run(item: WorkItem) -> TrackResult:
+        sleep(random.uniform(1, 3))
+        return worker(item, preset, out_dir, settings)
+
+    pool = ThreadPoolExecutor(max_workers=max(1, max_workers))
+    try:
+        futures: dict[Future[TrackResult], WorkItem] = {pool.submit(run, i): i for i in items}
+        for future in as_completed(futures):
+            item = futures[future]
+            try:
+                result = future.result()
+            except Exception as exc:
+                result = TrackResult(item.track, "failed", error=str(exc) or type(exc).__name__)
+            yield item, result
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)  # Ctrl+C: drop queued tracks
+
+
+def cleanup_tmp(out_dir: Path) -> None:
+    """Remove the temp folder once all workers are finished (only if empty)."""
+    try:
+        (out_dir / TMP_DIR_NAME).rmdir()
+    except OSError:
+        pass

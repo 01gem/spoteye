@@ -1,14 +1,16 @@
-"""Write Spotify metadata and cover art into mp3, m4a and opus files with mutagen."""
+"""Write Spotify metadata and cover art into mp3, m4a, opus, ogg and flac files with mutagen."""
 
 from __future__ import annotations
 
 import base64
 from pathlib import Path
 
-from mutagen.flac import Picture
+import mutagen
+from mutagen.flac import FLAC, Picture
 from mutagen.id3 import APIC, ID3, TALB, TDRC, TIT2, TPE1, TPE2, TPOS, TRCK, TSRC, ID3NoHeaderError
 from mutagen.mp4 import MP4, MP4Cover, MP4FreeForm
 from mutagen.oggopus import OggOpus
+from mutagen.oggvorbis import OggVorbis
 
 from app.services.spotify_client import TrackMeta
 
@@ -27,8 +29,10 @@ def tag_file(
         _tag_mp3(path, track, cover, track_no)
     elif ext == ".m4a":
         _tag_m4a(path, track, cover, track_no)
-    elif ext == ".opus":
-        _tag_opus(path, track, cover, track_no)
+    elif ext in (".opus", ".ogg"):
+        _tag_ogg(path, track, cover, track_no)
+    elif ext == ".flac":
+        _tag_flac(path, track, cover, track_no)
     else:
         raise ValueError(f"Unsupported file type for tagging: {path.suffix or path.name}")
 
@@ -84,8 +88,8 @@ def _tag_m4a(path: Path, track: TrackMeta, cover: bytes | None, track_no: int) -
     audio.save()
 
 
-def _tag_opus(path: Path, track: TrackMeta, cover: bytes | None, track_no: int) -> None:
-    audio = OggOpus(path)
+def _vorbis_fields(track: TrackMeta, track_no: int) -> dict[str, str]:
+    """Vorbis comments shared by opus, ogg and flac (empty values are skipped)."""
     fields: dict[str, str] = {
         "TITLE": track.title,
         "ARTIST": _artist(track),
@@ -96,14 +100,36 @@ def _tag_opus(path: Path, track: TrackMeta, cover: bytes | None, track_no: int) 
         "DATE": track.release_date,
         "ISRC": track.isrc or "",
     }
-    for key, value in fields.items():
-        if value:
-            audio[key] = [value]
+    return {key: value for key, value in fields.items() if value}
+
+
+def _picture(cover: bytes) -> Picture:
+    picture = Picture()
+    picture.type = FRONT_COVER
+    picture.mime = COVER_MIME
+    picture.desc = "Cover"
+    picture.data = cover
+    return picture
+
+
+def _tag_ogg(path: Path, track: TrackMeta, cover: bytes | None, track_no: int) -> None:
+    """Opus or Vorbis in an Ogg container (.opus or .ogg)."""
+    audio = mutagen.File(path)
+    if not isinstance(audio, (OggOpus, OggVorbis)):
+        raise ValueError(f"{path.name} is not an Ogg Opus/Vorbis file")
+    for key, value in _vorbis_fields(track, track_no).items():
+        audio[key] = [value]
     if cover:
-        picture = Picture()
-        picture.type = FRONT_COVER
-        picture.mime = COVER_MIME
-        picture.desc = "Cover"
-        picture.data = cover
-        audio["METADATA_BLOCK_PICTURE"] = [base64.b64encode(picture.write()).decode("ascii")]
+        encoded = base64.b64encode(_picture(cover).write()).decode("ascii")
+        audio["METADATA_BLOCK_PICTURE"] = [encoded]
+    audio.save()
+
+
+def _tag_flac(path: Path, track: TrackMeta, cover: bytes | None, track_no: int) -> None:
+    audio = FLAC(path)
+    for key, value in _vorbis_fields(track, track_no).items():
+        audio[key] = [value]
+    if cover:
+        audio.clear_pictures()
+        audio.add_picture(_picture(cover))
     audio.save()
