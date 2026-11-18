@@ -1,9 +1,10 @@
-"""Sign-in from the browser with a timeout (no network: the token exchange is faked)."""
+"""Sign-in from the browser with a timeout and cancel (no network: the token exchange is faked)."""
 
 from __future__ import annotations
 
 import socket
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -11,9 +12,12 @@ from typing import Any
 import httpx
 import pytest
 from spotipy.oauth2 import SpotifyOauthError, SpotifyPKCE
+from typer.testing import CliRunner
 
+from app.commands import app
 from app.config import Settings
 from app.services import spotify_auth, spotify_login
+from app.services.spotify_login import LoginCancelled
 
 
 @pytest.fixture
@@ -93,3 +97,36 @@ def test_busy_port_is_reported_without_opening_a_browser(port: int, exchanged: l
 ])  # fmt: skip
 def test_local_port(uri: str, expected: int | None) -> None:
     assert spotify_login.local_port(uri) == expected
+
+
+def test_cancel_frees_the_port_within_a_second(port: int, exchanged: list[Any],
+                                               monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    monkeypatch.setattr(spotify_login.webbrowser, "open", lambda _url: True)
+    cancel, raised = threading.Event(), []
+
+    def run() -> None:
+        try:
+            spotify_auth.login(settings(port), cancel=cancel, timeout_s=30)
+        except LoginCancelled as exc:
+            raised.append(str(exc))
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    time.sleep(0.3)  # let it start listening
+    started = time.monotonic()
+    cancel.set()
+    worker.join(1)
+    assert not worker.is_alive() and time.monotonic() - started < 1
+    assert raised == ["Sign-in cancelled."] and exchanged == []
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", port))
+
+
+def test_cli_login_ctrl_c_exits_130(monkeypatch: pytest.MonkeyPatch) -> None:
+    def interrupted(settings: Settings, cancel: threading.Event | None = None) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(spotify_auth, "login", interrupted)
+    result = CliRunner().invoke(app, ["login"])
+    assert result.exit_code == 130
+    assert "Sign-in cancelled." in result.output

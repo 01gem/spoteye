@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import typer
 from spotipy.oauth2 import SpotifyOauthError
 
 from app.commands import app, console, fail
@@ -16,6 +17,9 @@ def login() -> None:
     """Sign in to Spotify (opens a browser). Needed once, then again about every 6 months."""
     try:
         spotify_auth.login(load_settings())
+    except KeyboardInterrupt:  # the redirect wait wakes every 0.5 s and frees the port
+        console.print("Sign-in cancelled.")
+        raise typer.Exit(code=130) from None
     except (SpotifyConfigError, SpotifyOauthError) as exc:
         raise fail(str(exc)) from exc
     expires = spotify_auth.sign_in_expires_at()

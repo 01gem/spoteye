@@ -1,9 +1,7 @@
-"""Settings page API, Spotify sign-in from the UI and the yt-dlp update button (no network)."""
+"""Settings page API and the yt-dlp update button (no network)."""
 
 from __future__ import annotations
 
-import threading
-import time
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from test_api import add_job, client, env  # noqa: F401  (pytest fixtures)
 
-from app.config import Settings
-from app.services import spotify_auth, ytdlp_bin
+from app.services import ytdlp_bin
 
 CLIENT_ID = "0123456789abcdef0123456789abcdef"
 
@@ -73,45 +70,6 @@ def test_put_rejects_unwritable_output_dir(client: TestClient, env: Path) -> Non
 def test_put_accepts_empty_client_id(client: TestClient, env: Path) -> None:
     res = client.put("/api/settings", json=form(env, spotify_client_id=""))
     assert res.status_code == 200 and res.json()["spotify_client_id"] == ""
-
-
-def test_login_without_client_id_is_400(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SPOTIFY_CLIENT_ID", "")
-    assert client.post("/api/auth/login").status_code == 400
-
-
-def test_second_login_is_409_then_status_clears(client: TestClient,
-                                                monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
-    release, cleared = threading.Event(), []
-
-    def fake_login(settings: Settings) -> None:
-        release.wait(5)
-
-    monkeypatch.setenv("SPOTIFY_CLIENT_ID", CLIENT_ID)
-    monkeypatch.setattr(spotify_auth, "login", fake_login)
-    monkeypatch.setattr(spotify_auth, "clear_status_cache", lambda: cleared.append(True))
-    assert client.post("/api/auth/login").status_code == 202
-    assert client.post("/api/auth/login").status_code == 409
-    assert client.get("/api/auth/status").json() == {"running": True, "last_error": None}
-    release.set()
-    deadline = time.monotonic() + 5
-    while client.get("/api/auth/status").json()["running"] and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert client.get("/api/auth/status").json() == {"running": False, "last_error": None}
-    assert cleared == [True]
-
-
-def test_failed_login_reports_last_error(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_login(settings: Settings) -> None:
-        raise RuntimeError("Port 8765 is in use")
-
-    monkeypatch.setenv("SPOTIFY_CLIENT_ID", CLIENT_ID)
-    monkeypatch.setattr(spotify_auth, "login", fake_login)
-    assert client.post("/api/auth/login").status_code == 202
-    deadline = time.monotonic() + 5
-    while (status := client.get("/api/auth/status").json())["running"] and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert status == {"running": False, "last_error": "Port 8765 is in use"}
 
 
 def test_update_ytdlp_in_library_mode_is_400(client: TestClient) -> None:

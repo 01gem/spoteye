@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { errorMessage, getHealth } from '../api'
 import type { Health } from '../types'
+import SignInButton from './SignInButton'
 
 interface Problem {
   what: string
@@ -11,16 +12,9 @@ function problems(health: Health): Problem[] {
   const list: Problem[] = []
   if (!health.ffmpeg) list.push({ what: 'FFmpeg not found', fix: 'winget install Gyan.FFmpeg' })
   if (!health.deno) list.push({ what: 'Deno not found', fix: 'winget install DenoLand.Deno' })
-  if (health.spotify_auth === 'missing') {
-    list.push({
-      what: 'Spotify sign-in needed (run in backend)',
-      fix: 'python cli.py info <any spotify url>',
-    })
-  }
   return list
 }
 
-const LOGIN_CMD = 'python cli.py login'
 const EXPIRY_WARN_DAYS = 14
 const DAY_MS = 86_400_000
 
@@ -35,25 +29,29 @@ const TONE_CLASS: Record<Tone, string> = {
 interface SignInNotice {
   tone: Tone
   text: string
-  /** Show the `python cli.py login` command after the text. */
+  /** Show the "Sign in with Spotify" button after the text. */
   login: boolean
 }
 
-/** Red once Spotify ended the sign-in, amber during its last two weeks, gray when unreachable. */
+/** Amber before the first sign-in and in its last two weeks, red once expired, gray offline. */
 function signInNotice(health: Health): SignInNotice | null {
-  if (health.spotify_auth === 'expired') return { tone: 'red', text: 'Spotify sign-in expired:', login: true }
+  if (health.spotify_auth === 'missing') {
+    return { tone: 'amber', text: 'Sign in to Spotify to read playlists.', login: true }
+  }
+  if (health.spotify_auth === 'expired') return { tone: 'red', text: 'Spotify sign-in expired.', login: true }
   if (health.spotify_auth === 'offline') {
     return { tone: 'zinc', text: "Can't reach Spotify right now (offline?)", login: false }
   }
   if (health.spotify_auth !== 'ok' || !health.spotify_auth_expires) return null
   const expires = new Date(health.spotify_auth_expires)
   if (expires.getTime() - Date.now() > EXPIRY_WARN_DAYS * DAY_MS) return null
-  return { tone: 'amber', text: `Spotify sign-in expires on ${expires.toLocaleDateString()}: run`, login: true }
+  return { tone: 'amber', text: `Spotify sign-in expires on ${expires.toLocaleDateString()}.`, login: true }
 }
 
 export default function HealthBanner() {
   const [health, setHealth] = useState<Health | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [reload, setReload] = useState(0) // bumped after a sign-in to re-read health
 
   useEffect(() => {
     let cancelled = false
@@ -63,7 +61,7 @@ export default function HealthBanner() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reload])
 
   if (error) {
     return (
@@ -82,15 +80,10 @@ export default function HealthBanner() {
       {notice && (
         <div
           role={notice.tone === 'zinc' ? 'status' : 'alert'}
-          className={`rounded-lg border p-3 text-sm ${TONE_CLASS[notice.tone]}`}
+          className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3 text-sm ${TONE_CLASS[notice.tone]}`}
         >
-          {notice.text}
-          {notice.login && (
-            <>
-              {' '}
-              <code className="rounded bg-black/30 px-1.5 py-0.5 font-mono">{LOGIN_CMD}</code>
-            </>
-          )}
+          <span>{notice.text}</span>
+          {notice.login && <SignInButton onFinished={() => setReload((n) => n + 1)} />}
         </div>
       )}
       {missing.length > 0 && (

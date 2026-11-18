@@ -37,6 +37,12 @@ export interface Health {
   cookies: boolean
 }
 
+/** GET /api/auth/status: a cancelled sign-in ends with last_error null. */
+export interface LoginStatus {
+  running: boolean
+  last_error: string | null
+}
+
 export interface Preset {
   value: string
   label: string

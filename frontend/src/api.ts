@@ -1,5 +1,5 @@
 import type { Candidate, Health, JobDetail, JobSummary, Preset, Resolved, StopResult } from './types'
-import type { TrackRecord } from './types'
+import type { LoginStatus, TrackRecord } from './types'
 
 /** FastAPI errors: {"detail": "text"} or, for validation, {"detail": [{"msg": ...}, ...]}. */
 export function detailText(body: unknown): string | null {
@@ -53,6 +53,14 @@ function post(body: unknown): RequestInit {
 }
 
 export const getHealth = (): Promise<Health> => request<Health>('/api/health')
+
+/** Opens Spotify's sign-in page (via the backend); a pending sign-in is replaced. */
+export const startLogin = (): Promise<LoginStatus> =>
+  request<LoginStatus>('/api/auth/login', { method: 'POST' })
+
+export const cancelLogin = (): Promise<void> => send('/api/auth/cancel', { method: 'POST' })
+
+export const getLoginStatus = (): Promise<LoginStatus> => request<LoginStatus>('/api/auth/status')
 
 export const getPresets = (): Promise<Preset[]> => request<Preset[]>('/api/presets')
 

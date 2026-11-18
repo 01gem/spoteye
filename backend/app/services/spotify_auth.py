@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -108,13 +109,14 @@ def sign_in_expires_at() -> datetime | None:
     return start + timedelta(days=SIGN_IN_DAYS) if start else None
 
 
-def login(settings: Settings, timeout_s: float = LOGIN_TIMEOUT_S) -> None:
+def login(settings: Settings, cancel: threading.Event | None = None,
+          timeout_s: float = LOGIN_TIMEOUT_S) -> None:  # fmt: skip
     """Interactive sign-in (CLI, or the API's background thread): opens the browser and waits
     for Spotify's redirect on the redirect URI port."""
     if not settings.spotify_client_id:
         raise SpotifyConfigError(MISSING_CLIENT_ID_MSG)
     auth = _auth_manager(settings, open_browser=True)
     port = local_port(settings.spotify_redirect_uri)
-    code = wait_for_code(auth, port, timeout_s) if port else None  # None: spotipy's paste-the-URL flow
+    code = wait_for_code(auth, port, timeout_s, cancel) if port else None  # None: spotipy's paste-the-URL flow
     auth.get_access_token(code=code, check_cache=False)
     mark_signed_in()

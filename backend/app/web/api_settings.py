@@ -5,7 +5,7 @@ Writes (PUT/POST) are covered by the Origin/Host guard in main.py like every oth
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlmodel import col, select
 
@@ -50,14 +50,24 @@ def put_settings(body: SettingsIn) -> SettingsOut:
 
 @router.post("/auth/login", status_code=202, response_model=LoginStatus)
 def start_login(request: Request) -> LoginStatus:
-    """Open Spotify's sign-in page in the browser; poll GET /api/auth/status for the result."""
+    """Open Spotify's sign-in page in the browser; poll GET /api/auth/status for the result.
+
+    A pending sign-in is cancelled and replaced (409 only if it doesn't stop within 3 s).
+    """
     settings = load_settings()
     if not settings.spotify_client_id:
         raise HTTPException(status_code=400, detail="Set a Spotify Client ID in Settings first.")
-    task = login_task(request)
-    if not task.start(settings):
-        raise HTTPException(status_code=409, detail="A Spotify sign-in is already in progress.")
+    if not login_task(request).start(settings):
+        raise HTTPException(status_code=409, detail="Previous sign-in is still closing, "
+                                                    "try again in a few seconds.")  # fmt: skip
     return LoginStatus(running=True, last_error=None)
+
+
+@router.post("/auth/cancel", status_code=204, response_class=Response)
+def cancel_login(request: Request) -> Response:
+    """Stop waiting for Spotify's approval (no-op if no sign-in is running)."""
+    login_task(request).cancel()
+    return Response(status_code=204)
 
 
 @router.get("/auth/status", response_model=LoginStatus)
