@@ -10,6 +10,8 @@ from rich.console import Console
 from rich.markup import escape
 from rich.progress import track
 
+from app.services.hints import CLI
+
 app = typer.Typer(help="Spoteye: Spotify metadata tools.", no_args_is_help=True)
 console = Console()
 
@@ -45,7 +47,7 @@ def fail(message: str) -> typer.Exit:
 def stopped_exit(job_id: int) -> typer.Exit:
     """Ctrl+C during a job: say how to continue and return an Exit (130 = interrupted)."""
     console.print(f"[yellow]Stopped.[/yellow] Job {job_id} saved; continue with: "
-                  f"python cli.py resume {job_id}")  # fmt: skip
+                  f"{CLI} resume {job_id}")  # fmt: skip
     return typer.Exit(code=130)
 
 

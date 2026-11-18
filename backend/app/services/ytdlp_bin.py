@@ -14,6 +14,7 @@ from typing import Literal
 from yt_dlp.version import __version__ as LIBRARY_VERSION
 
 from app import config
+from app.services.hints import hint
 
 Mode = Literal["binary", "library"]
 NO_WINDOW: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # Windows only
@@ -63,7 +64,7 @@ def update() -> str:
     global _version_cache
     exe = find()
     if exe is None:
-        raise RuntimeError("yt-dlp runs as a library here: update it with pip install -U yt-dlp")
+        raise RuntimeError(hint("ytdlp_library"))
     try:
         result = run([str(exe), "-U"], UPDATE_TIMEOUT_S)
     except subprocess.TimeoutExpired as exc:

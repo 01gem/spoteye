@@ -15,6 +15,7 @@ from app.models import Job, to_local
 from app.services.job_runner import resume_job
 from app.services.job_state import KEPT_STATUSES, JobStopped, job_records
 from app.services.job_state import delete_job, newer_job_for_folder, stop_job
+from app.services.hints import CLI
 from app.services.matcher import Matcher
 from app.services.reports import missing_lines
 from app.services.spotify_client import SpotifyClient, SpotifyConfigError
@@ -115,7 +116,7 @@ def stop(job_id: int = typer.Argument(..., help="Job id (see `jobs`).")) -> None
         found = _get_job(session, job_id)
         if not stop_job(session, found):
             raise fail(f"Job {job_id} is not running (status: {found.status}).")
-    console.print(f"Job {job_id}: {styled(found.status)}. Continue with: python cli.py resume {job_id}")
+    console.print(f"Job {job_id}: {styled(found.status)}. Continue with: {CLI} resume {job_id}")
 
 
 @app.command()
@@ -136,7 +137,7 @@ def forget(job_id: int = typer.Argument(..., help="Job id (see `jobs`).")) -> No
     with get_session() as session:
         found = _get_job(session, job_id)
         if found.status in ("queued", "running"):
-            raise fail(f"Job {job_id} is {found.status}; stop it first: python cli.py stop {job_id}")
+            raise fail(f"Job {job_id} is {found.status}; stop it first: {CLI} stop {job_id}")
         out_dir = found.out_dir
         delete_job(session, found)
     console.print(f"Job {job_id} forgotten. Files in {escape(out_dir)} were not touched.")

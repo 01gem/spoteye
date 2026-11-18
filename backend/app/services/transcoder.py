@@ -6,7 +6,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-FFMPEG_MISSING_MSG: str = "FFmpeg not found on PATH. Install with: winget install Gyan.FFmpeg"
+from app.services.hints import hint
+
+FFMPEG_MISSING_MSG: str = hint("ffmpeg_path")
 
 
 def ensure_ffmpeg() -> None:

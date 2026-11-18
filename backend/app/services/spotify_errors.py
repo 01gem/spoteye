@@ -8,11 +8,11 @@ import requests
 from spotipy.exceptions import SpotifyException
 from spotipy.oauth2 import SpotifyOauthError
 
+from app.services.hints import hint
+
 OFFLINE_MSG: str = "Can't reach Spotify. Check your internet connection and try again."
 RATE_LIMIT_MSG: str = "Spotify is rate-limiting requests. Wait a minute and try again."
-EXPIRED_MSG: str = (
-    "Spotify sign-in expired (Spotify limits sign-ins to 6 months). Run: python cli.py login"
-)
+EXPIRED_MSG: str = hint("expired")
 EXPIRED_ERRORS: frozenset[str] = frozenset({"invalid_grant", "invalid_client"})  # Spotify refused
 # Catch these around any Spotify call: spotipy raises SpotifyException for HTTP errors and
 # exhausted retries, SpotifyOauthError when the token refresh is refused, and a lost

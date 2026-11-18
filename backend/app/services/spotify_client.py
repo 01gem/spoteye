@@ -10,12 +10,11 @@ from spotipy.cache_handler import CacheFileHandler
 from spotipy.oauth2 import SpotifyPKCE
 
 from app.config import CACHE_PATH, Settings, load_settings
+from app.services.hints import hint
 
 SCOPE: str = "playlist-read-private playlist-read-collaborative"
 PAGE_LIMIT: int = 50
-MISSING_CLIENT_ID_MSG: str = (
-    "SPOTIFY_CLIENT_ID is not set. Copy backend/.env.example to backend/.env and fill it in."
-)
+MISSING_CLIENT_ID_MSG: str = hint("no_client_id")
 NOT_ACCESSIBLE_MSG: str = (
     "Spotify only returns tracks for playlists you own or collaborate on. "
     "Copy it to your library first."

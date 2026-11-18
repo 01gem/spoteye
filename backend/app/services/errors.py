@@ -4,14 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from app.services.hints import hint
+
 MAX_RAW_CHARS: int = 300
 
-BOT_CHECK = ("YouTube bot check. Export cookies.txt from a browser where you're logged in to "
-             "YouTube and set COOKIES_FILE in backend/.env.")  # fmt: skip
-HTTP_403 = "YouTube refused the download (403). Update yt-dlp: pip install -U yt-dlp"
+BOT_CHECK = hint("bot_check")
+HTTP_403 = hint("http_403")
 UNAVAILABLE = "That YouTube Music upload is unavailable. Use Pick match to choose another."
-NEED_DENO = "yt-dlp needs Deno: winget install DenoLand.Deno, then restart the server."
-NO_FFMPEG = "FFmpeg not found: winget install Gyan.FFmpeg"
+NEED_DENO = hint("need_deno")
+NO_FFMPEG = hint("no_ffmpeg")
 NETWORK = "Network problem while downloading. Resume the job to retry."
 
 Rule = tuple[Callable[[str], bool], str]

@@ -15,6 +15,7 @@ from app.db import get_session
 from app.models import Job
 from app.services import ytdlp_bin
 from app.services.env_file import update_env_file
+from app.services.hints import hint
 from app.web.login_task import LoginTask
 from app.web.settings_form import SettingsIn, SettingsOut, settings_out
 
@@ -80,8 +81,7 @@ def login_status(request: Request) -> LoginStatus:
 def update_ytdlp() -> UpdateOut:
     """Run yt-dlp -U. Not while a job is queued or running (the program would be in use)."""
     if ytdlp_bin.find() is None:
-        raise HTTPException(status_code=400, detail="yt-dlp runs as a library here: "
-                                                    "pip install -U yt-dlp")  # fmt: skip
+        raise HTTPException(status_code=400, detail=hint("ytdlp_library"))
     with get_session() as session:
         busy = session.exec(select(Job.id).where(col(Job.status).in_(BUSY_STATUSES))).first()
     if busy is not None:

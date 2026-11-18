@@ -10,8 +10,11 @@ import httpx
 import typer
 import uvicorn
 
+from rich.markup import escape
+
 from app.commands import app, console, fail
 from app.config import FRONTEND_DIST
+from app.services.hints import hint
 
 HOST: str = "127.0.0.1"
 BROWSER_DELAY_S: float = 1.5
@@ -60,8 +63,7 @@ def serve(
     if chosen != port:
         console.print(f"[yellow]Port {port} is used by another program; using {chosen}.[/yellow]")
     if not (FRONTEND_DIST / "index.html").is_file():
-        console.print("[yellow]UI not built: cd ..\\frontend; npm run build "
-                      "(the API still works at /docs)[/yellow]")  # fmt: skip
+        console.print(f"[yellow]{escape(hint('ui_missing'))}[/yellow]")
     url = f"http://{HOST}:{chosen}"
     if not no_browser:
         threading.Timer(BROWSER_DELAY_S, webbrowser.open, args=(url,)).start()

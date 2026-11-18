@@ -9,13 +9,12 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from app.config import Settings, load_settings
+from app.services.hints import hint
 from app.services.spotify_auth import TokenStatus, token_status
 from app.services.spotify_client import SpotifyClient
 from app.services.spotify_errors import EXPIRED_MSG, OFFLINE_MSG
 
-NEED_TOKEN_MSG: str = (
-    "Spotify sign-in needed: run  python cli.py info <any spotify url>  once in the terminal."
-)
+NEED_TOKEN_MSG: str = hint("need_token")
 SIGN_IN_ERRORS: dict[str, tuple[int, str]] = {
     "missing": (401, NEED_TOKEN_MSG),
     "expired": (401, EXPIRED_MSG),
