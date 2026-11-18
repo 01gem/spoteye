@@ -21,7 +21,8 @@ export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: P
   const [picking, setPicking] = useState(false)
   const revealable = KEPT_STATUSES.includes(record.status) && record.file_name !== null
   const missing = MISSING_STATUSES.includes(record.status)
-  const pickable = record.status === 'review_skipped' || record.status === 'not_found'
+  const pickable =
+    record.status === 'review_skipped' || record.status === 'not_found' || record.status === 'failed'
   const pickerId = `pick-${record.id}`
 
   async function reveal() {

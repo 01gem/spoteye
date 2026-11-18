@@ -53,6 +53,8 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
+For development, install `pip install -r requirements-dev.txt` instead.
+
 Edit `backend\.env`:
 
 | Key | Required | Default | Meaning |
@@ -63,12 +65,17 @@ Edit `backend\.env`:
 | `COOKIES_FILE` | no | – | Path to a `cookies.txt` exported from a browser logged in to YouTube. Helps with bot checks; with YouTube Music Premium it unlocks AAC 256k |
 | `DB_PATH` | no | `backend\spoteye.db` | SQLite file for job history and the match cache (relative to `backend\`) |
 | `MAX_WORKERS` | no | `3` | Parallel downloads per job |
+| `MATCH_RETRY_DAYS` | no | `14` | Cached *not found* / *review* matches older than this are searched again (new uploads appear on YouTube Music over time). Real and hand-picked matches never expire |
 
-Sign in to Spotify once (opens a browser; the token is cached in `backend\.cache`):
+Sign in to Spotify (opens a browser; the token is cached in `backend\.cache`):
 
 ```powershell
-python cli.py info https://open.spotify.com/playlist/<your playlist id>
+python cli.py login
 ```
+
+Spotify limits a sign-in to **6 months**. After that the web UI shows a red
+"Spotify sign-in expired" banner (amber two weeks before), and the API answers 401: run
+`python cli.py login` again.
 
 Build the web UI:
 
@@ -115,7 +122,7 @@ npm run dev    # http://localhost:5173, proxies /api to port 8000
 - Paste a link, **Preview** (shows where the files will be saved), pick a preset, **Download**.
 - Watch progress live. **Stop** (click twice) halts a job; tracks already downloading finish.
   **Resume** picks it up again; existing files are skipped.
-- For a *not found* or *review* track: **Pick match** shows the top YouTube Music candidates
+- For a *not found*, *review* or *failed* track: **Pick match** shows the top YouTube Music candidates
   with a Listen link, or paste any YouTube / YouTube Music link. **Attach file** files your own
   audio under that track instead.
 - **Open folder** / **Show in folder** open Windows Explorer.
@@ -127,6 +134,7 @@ Run from `backend` with the venv active: `python cli.py <command> --help` for ev
 
 | Command | What it does |
 |---|---|
+| `login` | Sign in to Spotify in the browser (again every 6 months; prints the approximate date) |
 | `info URL` | Show Spotify metadata for a track or playlist (also does the first sign-in) |
 | `match URL` | Match tracks to YouTube Music and show scores, without downloading |
 | `download URL [--preset best\|aac256\|mp3-320\|mp3-v0] [--out DIR] [--limit N] [--workers N] [--accept-review] [--rematch]` | Create a job and download it |
@@ -154,10 +162,18 @@ Download errors are shown per track in plain words:
 | FFmpeg not found | `winget install Gyan.FFmpeg`, then open a new terminal |
 | Network problem while downloading | Check the connection and **Resume** the job |
 
+Keep yt-dlp current: `pip install -U yt-dlp` (YouTube changes often; most download errors are
+fixed by a newer yt-dlp).
+
 Other problems:
 
-- **"Spotify sign-in needed"**: run `python cli.py info <any spotify url>` once in a terminal.
-  The server never opens a sign-in browser by itself.
+- **"Spotify sign-in needed"**: run `python cli.py login` (or `python cli.py info <any spotify url>`)
+  once in a terminal. The server never opens a sign-in browser by itself.
+- **"Spotify sign-in expired"**: Spotify ends every sign-in after 6 months. Run
+  `python cli.py login`, then reload the page.
+- **400 "Invalid host header"** or **403 "Cross-site request blocked"**: open the UI at
+  `http://127.0.0.1:8000` or `http://localhost:8000`. Other host names and writes from other
+  websites are refused on purpose.
 - **"Playlist not accessible"**: the playlist is Spotify-owned (editorial/algorithmic), private
   to someone else, or your account isn't added under *User Management* in the dashboard. Copy the
   tracks into a playlist you own.

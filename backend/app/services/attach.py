@@ -63,7 +63,7 @@ def attach_file(
     else:
         index, folder = None, settings.output_dir
 
-    target = folder / build_filename(track, ext.lstrip("."), index)
+    target = folder / build_filename(track, ext.lstrip("."), index, folder)
     same = _is_same_file(src, target)
     if target.exists() and not same and not force:
         raise FileExistsError(f"{target} already exists (use --force to overwrite)")

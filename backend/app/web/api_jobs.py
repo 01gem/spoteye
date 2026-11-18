@@ -113,8 +113,7 @@ def resume(job_id: int, request: Request, body: ResumeIn | None = None) -> JobCr
         job = get_job_or_404(session, job_id)
     if is_busy(request, job):
         raise HTTPException(status_code=409, detail=f"Job {job_id} is already {job.status}.")
-    if not auth.has_spotify_token():
-        raise HTTPException(status_code=401, detail=auth.NEED_TOKEN_MSG)
+    auth.require_spotify_auth(load_settings())
     job_queue(request).submit_resume(job_id, (body or ResumeIn()).accept_review)
     return JobCreated(job_id=job_id)
 

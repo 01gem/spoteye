@@ -139,8 +139,10 @@ class JobQueue:
                 run_job(session, job, pairs, Matcher(), settings, accept_review=accept_review,
                         **callbacks)  # fmt: skip
             else:
-                if not auth.has_spotify_token():
-                    raise RuntimeError(auth.NEED_TOKEN_MSG)
+                if (status := auth.token_status(settings)) != "ok":
+                    log.warning("Job %s not resumed: %s", job_id, auth.sign_in_message(status))
+                    self._set_status(job_id, "failed", finished=True)  # publishes a job event
+                    return
                 client = SpotifyClient(settings)
                 resume_job(session, job, client, Matcher(), settings, accept_review=accept_review,
                            **callbacks)  # fmt: skip

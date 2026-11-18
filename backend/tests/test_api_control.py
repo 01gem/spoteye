@@ -36,7 +36,7 @@ def blocking_client(env: Path, gate: threading.Event,
         return fake_worker(item, preset, out_dir, s)
 
     monkeypatch.setattr(main, "RUN_OPTIONS", {"worker": blocked_worker, "sleep": lambda _s: None})
-    with TestClient(main.app) as test_client:
+    with TestClient(main.app, base_url="http://127.0.0.1") as test_client:
         yield test_client
     gate.set()
 

@@ -19,10 +19,15 @@ export const MISSING_STATUSES: readonly RecordStatus[] = ['not_found', 'review_s
 export const BUSY_STATUSES: readonly JobStatus[] = ['queued', 'running']
 export const RESUMABLE_STATUSES: readonly JobStatus[] = ['partial', 'failed', 'stopped']
 
+/** missing = never signed in; expired = Spotify ended the sign-in (after about 6 months). */
+export type SpotifyAuth = 'ok' | 'missing' | 'expired'
+
 export interface Health {
   ffmpeg: boolean
   deno: boolean
-  spotify_auth: boolean
+  spotify_auth: SpotifyAuth
+  /** ISO UTC, about 6 months after the last `python cli.py login`; null if unknown. */
+  spotify_auth_expires: string | null
   output_dir: string
   yt_dlp_version: string
   /** COOKIES_FILE is set and the file exists. */

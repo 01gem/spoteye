@@ -11,20 +11,17 @@ import random
 import shutil
 import tempfile
 import time
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from sqlmodel import Session
-
 from app.config import Settings
-from app.models import MatchCache, now
 from app.services.downloader import download_audio, fetch_cover
 from app.services.errors import friendly_error
 from app.services.filenames import build_filename, existing_output
-from app.services.matcher import Matcher
+from app.services.match_cache import match_all
 from app.services.presets import PRESET_SPECS, Preset, describe_output, describe_source
 from app.services.presets import plan_output
 from app.services.spotify_client import TrackMeta
@@ -61,26 +58,6 @@ class WorkItem:
 Worker = Callable[[WorkItem, Preset, Path, Settings], TrackResult]
 
 
-def match_all(
-    tracks: Iterable[TrackMeta], matcher: Matcher, session: Session, rematch: bool = False
-) -> dict[str, MatchCache]:
-    """Phase 1: match each track, using and filling MatchCache (bypassed when rematch)."""
-    results: dict[str, MatchCache] = {}
-    for track in tracks:
-        cached = None if rematch else session.get(MatchCache, track.spotify_id)
-        if cached is None:
-            result = matcher.match(track)
-            cached = MatchCache(
-                spotify_id=track.spotify_id, video_id=result.best.video_id if result.best else None,
-                score=result.score, status=result.status, matched_at=now(),
-            )  # fmt: skip
-            if result.best is not None:  # no candidates at all may be a network error: don't cache
-                cached = session.merge(cached)
-                session.commit()
-        results[track.spotify_id] = cached
-    return results
-
-
 def download_track(item: WorkItem, preset: Preset, out_dir: Path, settings: Settings) -> TrackResult:
     """Download -> transcode -> cover -> tag one matched track (same steps as M3)."""
     track = item.track
@@ -93,8 +70,10 @@ def download_track(item: WorkItem, preset: Preset, out_dir: Path, settings: Sett
         selector = PRESET_SPECS[preset].format_selector
         audio = download_audio(item.video_id, tmp_dir, selector, cookies)
         plan = plan_output(preset, audio.acodec, audio.abr)
-        name = build_filename(track, plan.ext, item.index)
-        staged = tmp_dir / "out" / name  # convert + tag here; the final name appears only complete
+        name = build_filename(track, plan.ext, item.index, out_dir)
+        # Convert + tag here (short name: the temp path is longer than the final one), so the
+        # final name appears only complete.
+        staged = tmp_dir / "out" / f"track.{plan.ext}"
         staged.parent.mkdir()
         transcode(audio.path, staged, plan.ffmpeg_args)
         tag_file(staged, track, fetch_cover(track.cover_url))

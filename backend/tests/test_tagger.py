@@ -87,6 +87,21 @@ def test_tag_round_trip(tmp_path: Path, ext: str) -> None:
     assert stored_cover == cover
 
 
+def test_mp3_is_saved_as_id3_v23(tmp_path: Path) -> None:
+    audio_path = tmp_path / "silence.mp3"
+    _ffmpeg("-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "1", *ENCODERS["mp3"],
+            str(audio_path))  # fmt: skip
+
+    tag_file(audio_path, TRACK, None)
+
+    id3 = ID3(audio_path)
+    assert id3.version == (2, 3, 0)
+    assert id3["TIT2"].text[0] == "Café Song"
+    assert id3["TPE1"].text[0] == "Artist One, Artist Two"
+    assert str(id3["TDRC"].text[0]).startswith("2020")
+    assert id3["TSRC"].text[0] == "USABC2000001"
+
+
 def test_unsupported_extension_raises(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         tag_file(tmp_path / "song.wav", TRACK, None)

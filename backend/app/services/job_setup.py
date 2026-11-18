@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from app.services.filenames import safe_filename
+from app.services.filenames import MAX_FOLDER_LEN, safe_filename
 from app.services.link_parser import parse_spotify_link
 from app.services.spotify_client import SpotifyClient, TrackMeta
 
@@ -44,7 +44,7 @@ def load_tracks(url: str, limit: int | None, client: TrackSource | None = None) 
 
 def job_target(base: Path, playlist_name: str | None) -> Path:
     """Playlists get their own sub-folder of base; single tracks go straight into base."""
-    return base / safe_filename(playlist_name) if playlist_name else base
+    return base / safe_filename(playlist_name, max_len=MAX_FOLDER_LEN) if playlist_name else base
 
 
 def job_name(playlist_name: str | None, tracks: Sequence[TrackMeta], spotify_id: str) -> str:

@@ -11,6 +11,7 @@ from pydantic import BaseModel, PlainSerializer
 from app.models import Job, TrackRecord
 from app.services.job_state import KEPT_STATUSES
 from app.services.presets import Preset
+from app.services.spotify_auth import TokenStatus
 
 
 def iso_utc(value: datetime) -> str:
@@ -107,7 +108,8 @@ class ResumeIn(BaseModel):
 class Health(BaseModel):
     ffmpeg: bool
     deno: bool
-    spotify_auth: bool
+    spotify_auth: TokenStatus
+    spotify_auth_expires: UtcDatetime | None  # about 6 months after the last sign-in
     output_dir: str
     yt_dlp_version: str
     cookies: bool

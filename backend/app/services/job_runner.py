@@ -6,6 +6,7 @@ All database writes happen in the main thread (here and in job_state). Ctrl+C or
 from __future__ import annotations
 
 import time
+from datetime import timedelta
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any, Protocol
@@ -86,9 +87,9 @@ def run_job(
             else:
                 to_match.append((record, track))
 
-        tracks = [track for _, track in to_match]
-        pending = until_stopped(tracks, should_stop)
-        matches = match_all(progress(pending, "Matching...", len(tracks)), matcher, session, rematch)
+        pending = until_stopped([track for _, track in to_match], should_stop)
+        matches = match_all(progress(pending, "Matching...", len(to_match)), matcher, session,
+                            rematch, timedelta(days=settings.match_retry_days))  # fmt: skip
         if should_stop is not None and should_stop():
             raise StopRequested
         items: list[WorkItem] = []

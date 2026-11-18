@@ -17,6 +17,7 @@ DEFAULT_REDIRECT_URI: str = "http://127.0.0.1:8765/callback"
 DEFAULT_OUTPUT_DIR: str = r"D:\Music\Spoteye"
 DEFAULT_DB_PATH: Path = BACKEND_DIR / "spoteye.db"
 DEFAULT_MAX_WORKERS: int = 3
+DEFAULT_MATCH_RETRY_DAYS: int = 14
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class Settings:
     cookies_file: Path | None
     db_path: Path = DEFAULT_DB_PATH
     max_workers: int = DEFAULT_MAX_WORKERS
+    match_retry_days: int = DEFAULT_MATCH_RETRY_DAYS
 
 
 def _optional_path(value: str | None) -> Path | None:
@@ -60,4 +62,5 @@ def load_settings(env_path: Path = ENV_PATH) -> Settings:
         cookies_file=_optional_path(os.getenv("COOKIES_FILE")),
         db_path=_db_path(os.getenv("DB_PATH")),
         max_workers=_positive_int(os.getenv("MAX_WORKERS"), DEFAULT_MAX_WORKERS),
+        match_retry_days=_positive_int(os.getenv("MATCH_RETRY_DAYS"), DEFAULT_MATCH_RETRY_DAYS),
     )

@@ -61,7 +61,7 @@ def _tag_mp3(path: Path, track: TrackMeta, cover: bytes | None, track_no: int) -
         tags.add(TSRC(encoding=3, text=track.isrc))
     if cover:
         tags.add(APIC(encoding=3, mime=COVER_MIME, type=FRONT_COVER, desc="Cover", data=cover))
-    tags.save(path)
+    tags.save(path, v2_version=3)  # ID3v2.3: widest player support
 
 
 def _tag_m4a(path: Path, track: TrackMeta, cover: bytes | None, track_no: int) -> None:

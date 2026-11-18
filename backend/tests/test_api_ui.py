@@ -9,6 +9,28 @@ from fastapi.testclient import TestClient
 from test_api import client, env  # noqa: F401  (pytest fixtures)
 
 from app import main
+from app.services import spotify_auth
+from app.web import auth
+
+HEALTH_KEYS = {"ffmpeg", "deno", "spotify_auth", "spotify_auth_expires", "output_dir",
+               "yt_dlp_version", "cookies"}  # fmt: skip
+
+
+def test_health_returns_seven_keys(client: TestClient) -> None:
+    body = client.get("/api/health").json()
+    assert set(body) == HEALTH_KEYS
+    assert body["spotify_auth"] == "ok"
+
+
+def test_health_reports_expired_sign_in_and_expiry(client: TestClient, tmp_path: Path,
+                                                   monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    meta = tmp_path / "meta.json"
+    meta.write_text('{"signed_in_at": "2026-05-01T10:00:00+00:00"}', encoding="utf-8")
+    monkeypatch.setattr(spotify_auth, "SIGN_IN_META", meta)
+    monkeypatch.setattr(auth, "token_status", lambda _settings: "expired")
+    body = client.get("/api/health").json()
+    assert body["spotify_auth"] == "expired"
+    assert body["spotify_auth_expires"] == "2026-10-28T10:00:00Z"
 
 
 def test_health_reports_yt_dlp_version_and_cookies(client: TestClient) -> None:

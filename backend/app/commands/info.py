@@ -6,6 +6,7 @@ import typer
 from rich.table import Table
 
 from app.commands import app, console
+from app.services import spotify_auth
 from app.services.link_parser import parse_spotify_link
 from app.services.spotify_client import (
     PlaylistNotAccessible,
@@ -63,3 +64,5 @@ def info(url: str = typer.Argument(..., help="Spotify track or playlist URL/URI.
         raise typer.Exit(code=1) from exc
 
     console.print(build_table(tracks, title=f"{kind}: {spotify_id}"))
+    if spotify_auth.signed_in_at() is None:  # the first sign-in happened through info
+        spotify_auth.mark_signed_in()

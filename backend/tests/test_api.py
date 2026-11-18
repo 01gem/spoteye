@@ -60,7 +60,7 @@ def fake_worker(item: WorkItem, preset: Preset, out_dir: Path, settings: Setting
 def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     monkeypatch.setenv("DB_PATH", str(tmp_path / "api.db"))
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "music"))
-    monkeypatch.setattr(auth, "has_spotify_token", lambda: True)
+    monkeypatch.setattr(auth, "token_status", lambda _settings: "ok")
     monkeypatch.setattr(auth, "SpotifyClient", FakeSpotify)
     monkeypatch.setattr(job_queue, "Matcher", FakeMatcher)
     monkeypatch.setattr(main, "RUN_OPTIONS", {"worker": fake_worker, "sleep": lambda _s: None})
@@ -70,7 +70,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
 
 @pytest.fixture
 def client(env: Path) -> Iterator[TestClient]:
-    with TestClient(main.app) as test_client:
+    with TestClient(main.app, base_url="http://127.0.0.1") as test_client:
         yield test_client
 
 
@@ -98,18 +98,12 @@ def add_job(status: str, out_dir: Path) -> int:
         return job.id
 
 
-def test_health_returns_six_keys(client: TestClient) -> None:
-    body = client.get("/api/health").json()
-    assert set(body) == {"ffmpeg", "deno", "spotify_auth", "output_dir", "yt_dlp_version", "cookies"}
-    assert body["spotify_auth"] is True
-
-
 def test_resolve_rejects_non_spotify_url(client: TestClient) -> None:
     assert client.post("/api/resolve", json={"url": "https://example.com/x"}).status_code == 422
 
 
 def test_resolve_without_token_is_401(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(auth, "has_spotify_token", lambda: False)
+    monkeypatch.setattr(auth, "token_status", lambda _settings: "missing")
     res = client.post("/api/resolve", json={"url": PLAYLIST_URL})
     assert res.status_code == 401
     assert "python cli.py info" in res.json()["detail"]
@@ -145,5 +139,5 @@ def test_resume_running_job_is_409(client: TestClient, env: Path) -> None:
 def test_startup_marks_running_job_stopped(env: Path) -> None:
     init_db(env / "api.db")
     job_id = add_job("running", env / "music" / "Mix")
-    with TestClient(main.app) as test_client:
+    with TestClient(main.app, base_url="http://127.0.0.1") as test_client:
         assert test_client.get(f"/api/jobs/{job_id}").json()["status"] == "stopped"

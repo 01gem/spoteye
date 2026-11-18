@@ -13,6 +13,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import col, select
 from yt_dlp.version import __version__ as YT_DLP_VERSION
@@ -21,14 +22,17 @@ from app.config import FRONTEND_DIST, load_settings
 from app.db import get_session, init_db
 from app.models import Job, now
 from app.services.presets import PRESET_SPECS
+from app.services.spotify_auth import sign_in_expires_at
 from app.web import api_files, api_jobs, api_stream, api_tracks, auth
 from app.web.events import EventBus
 from app.web.job_queue import JobQueue
 from app.web.schemas import Health, PresetOut
+from app.web.security import OriginCheckMiddleware
 
 # Extra keyword arguments for run_job (tests inject a fake worker and a no-op sleep here).
 RUN_OPTIONS: dict[str, Any] = {}
 ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+ALLOWED_HOSTS: list[str] = ["127.0.0.1", "localhost"]
 
 
 def mark_interrupted_jobs() -> int:
@@ -61,6 +65,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(OriginCheckMiddleware, allowed_origins=ALLOWED_ORIGINS)
+# Added last = runs first: other Host names (DNS rebinding) get 400 before anything else.
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 app.include_router(api_jobs.router)
 app.include_router(api_stream.router)
 app.include_router(api_files.router)
@@ -73,7 +80,8 @@ def health() -> Health:
     return Health(
         ffmpeg=shutil.which("ffmpeg") is not None,
         deno=shutil.which("deno") is not None,
-        spotify_auth=auth.has_spotify_token(),
+        spotify_auth=auth.token_status(settings),
+        spotify_auth_expires=sign_in_expires_at(),
         output_dir=str(settings.output_dir),
         yt_dlp_version=YT_DLP_VERSION,
         cookies=settings.cookies_file is not None and settings.cookies_file.is_file(),

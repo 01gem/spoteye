@@ -13,6 +13,9 @@ from app.config import CACHE_PATH, Settings, load_settings
 
 SCOPE: str = "playlist-read-private playlist-read-collaborative"
 PAGE_LIMIT: int = 50
+MISSING_CLIENT_ID_MSG: str = (
+    "SPOTIFY_CLIENT_ID is not set. Copy backend/.env.example to backend/.env and fill it in."
+)
 NOT_ACCESSIBLE_MSG: str = (
     "Spotify only returns tracks for playlists you own or collaborate on. "
     "Copy it to your library first."
@@ -75,10 +78,7 @@ class SpotifyClient:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings: Settings = settings or load_settings()
         if not self.settings.spotify_client_id:
-            raise SpotifyConfigError(
-                "SPOTIFY_CLIENT_ID is not set. Copy backend/.env.example to "
-                "backend/.env and fill it in."
-            )
+            raise SpotifyConfigError(MISSING_CLIENT_ID_MSG)
         auth = SpotifyPKCE(
             client_id=self.settings.spotify_client_id,
             redirect_uri=self.settings.spotify_redirect_uri,
