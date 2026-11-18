@@ -1,4 +1,5 @@
 import type { Resolved } from '../types'
+import SaveLocation from './SaveLocation'
 
 /** 3723000 -> "1:02:03", 185000 -> "3:05" (hours only when needed unless forceHours). */
 function formatDuration(ms: number, forceHours = false): string {
@@ -22,6 +23,9 @@ export default function TrackPreview({ resolved }: { resolved: Resolved }) {
       <p className="mb-3 text-sm text-zinc-400">
         {count} {count === 1 ? 'track' : 'tracks'} · {formatDuration(totalMs, true)}
       </p>
+      <div className="mb-3">
+        <SaveLocation path={resolved.target_dir} label="Will be saved to" />
+      </div>
       <ol className="max-h-80 space-y-1 overflow-y-auto pr-1">
         {resolved.tracks.map((t) => (
           <li key={`${t.position}-${t.spotify_id}`} className="flex items-center gap-3 text-sm">

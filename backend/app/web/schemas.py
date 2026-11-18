@@ -40,6 +40,7 @@ class ResolvedTrack(BaseModel):
 class Resolved(BaseModel):
     kind: str
     name: str
+    target_dir: str
     tracks: list[ResolvedTrack]
 
 

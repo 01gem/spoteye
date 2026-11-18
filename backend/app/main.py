@@ -18,7 +18,7 @@ from app.config import load_settings
 from app.db import get_session, init_db
 from app.models import Job, now
 from app.services.presets import PRESET_SPECS
-from app.web import api_jobs, api_stream, auth
+from app.web import api_files, api_jobs, api_stream, auth
 from app.web.events import EventBus
 from app.web.job_queue import JobQueue
 from app.web.schemas import Health, PresetOut
@@ -60,6 +60,7 @@ app.add_middleware(
 )
 app.include_router(api_jobs.router)
 app.include_router(api_stream.router)
+app.include_router(api_files.router)
 
 
 @app.get("/api/health", response_model=Health)

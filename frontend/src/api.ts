@@ -21,18 +21,26 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+async function fail(res: Response): Promise<never> {
+  let message = `${res.status} ${res.statusText}`.trim()
+  try {
+    message = detailText(await res.json()) ?? message
+  } catch {
+    // not JSON (e.g. the dev proxy could not reach the backend)
+  }
+  throw new Error(message)
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init)
-  if (!res.ok) {
-    let message = `${res.status} ${res.statusText}`.trim()
-    try {
-      message = detailText(await res.json()) ?? message
-    } catch {
-      // not JSON (e.g. the dev proxy could not reach the backend)
-    }
-    throw new Error(message)
-  }
+  if (!res.ok) await fail(res)
   return (await res.json()) as T
+}
+
+/** For 204 No Content endpoints: never calls res.json(). */
+async function send(path: string, init?: RequestInit): Promise<void> {
+  const res = await fetch(path, init)
+  if (!res.ok) await fail(res)
 }
 
 function post(body: unknown): RequestInit {
@@ -63,6 +71,12 @@ export const getJob = (id: number): Promise<JobDetail> => request<JobDetail>(`/a
 
 export const resumeJob = (id: number, acceptReview = false): Promise<{ job_id: number }> =>
   request<{ job_id: number }>(`/api/jobs/${id}/resume`, post({ accept_review: acceptReview }))
+
+export const openFolder = (jobId: number): Promise<void> =>
+  send(`/api/jobs/${jobId}/open-folder`, { method: 'POST' })
+
+export const revealFile = (jobId: number, recordId: number): Promise<void> =>
+  send(`/api/jobs/${jobId}/tracks/${recordId}/reveal`, { method: 'POST' })
 
 export const getMissing = (id: number): Promise<TrackRecord[]> =>
   request<TrackRecord[]>(`/api/jobs/${id}/missing`)

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
-import { attachFile, errorMessage } from '../api'
-import { MISSING_STATUSES } from '../types'
+import { attachFile, errorMessage, revealFile } from '../api'
+import { KEPT_STATUSES, MISSING_STATUSES } from '../types'
 import type { TrackRecord } from '../types'
 import StatusPill from './StatusPill'
 
@@ -19,6 +19,8 @@ export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: P
   const inputRef = useRef<HTMLInputElement>(null)
   const [progress, setProgress] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [revealError, setRevealError] = useState<string | null>(null)
+  const revealable = KEPT_STATUSES.includes(record.status) && record.file_name !== null
   const missing = MISSING_STATUSES.includes(record.status)
   const uploading = progress !== null
 
@@ -34,6 +36,15 @@ export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: P
       setError(errorMessage(e))
     } finally {
       setProgress(null)
+    }
+  }
+
+  async function reveal() {
+    setRevealError(null)
+    try {
+      await revealFile(jobId, record.id)
+    } catch (e: unknown) {
+      setRevealError(errorMessage(e))
     }
   }
 
@@ -62,10 +73,24 @@ export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: P
           <span className="tabular-nums">score {record.score === null ? '-' : record.score.toFixed(2)}</span>
         </p>
         {record.file_name && (
-          <p className="truncate font-mono text-[11px] text-zinc-500" title={record.file_name}>
-            {record.file_name}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="min-w-0 truncate font-mono text-[11px] text-zinc-500" title={record.file_name}>
+              {record.file_name}
+            </p>
+            {revealable && (
+              <button
+                type="button"
+                onClick={() => void reveal()}
+                aria-label={`Show ${record.title} in folder`}
+                title={revealError ?? undefined}
+                className="shrink-0 rounded border border-zinc-700 px-1.5 py-0.5 text-[11px] text-zinc-300 hover:bg-zinc-800"
+              >
+                Show in folder
+              </button>
+            )}
+          </div>
         )}
+        {revealError && <p className="text-xs text-red-400">{revealError}</p>}
         {record.error && <p className="text-xs text-red-400">{record.error}</p>}
         {missing && (
           <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">

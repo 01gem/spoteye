@@ -67,14 +67,15 @@ async def _load(url: str) -> tuple[LoadedTracks, Settings]:
 
 @router.post("/resolve", response_model=Resolved)
 async def resolve(body: ResolveIn) -> Resolved:
-    loaded, _ = await _load(body.url)
+    loaded, settings = await _load(body.url)
     tracks = [
         ResolvedTrack(spotify_id=t.spotify_id, position=i, title=t.title, artists=t.artists,
                       album=t.album, duration_ms=t.duration_ms, isrc=t.isrc, cover_url=t.cover_url)
         for i, t in enumerate(loaded.tracks, start=1)
     ]  # fmt: skip
     name = job_name(loaded.playlist_name, loaded.tracks, loaded.spotify_id)
-    return Resolved(kind=loaded.kind, name=name, tracks=tracks)
+    target = job_target(settings.output_dir, loaded.playlist_name)  # same folder create() uses
+    return Resolved(kind=loaded.kind, name=name, target_dir=str(target), tracks=tracks)
 
 
 @router.post("/jobs", status_code=201, response_model=JobCreated)

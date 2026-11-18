@@ -45,6 +45,8 @@ export interface ResolvedTrack {
 export interface Resolved {
   kind: 'track' | 'playlist'
   name: string
+  /** Folder the job will save into (same rule as job creation). */
+  target_dir: string
   tracks: ResolvedTrack[]
 }
 

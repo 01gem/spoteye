@@ -60,7 +60,7 @@ export default function HealthBanner() {
         </div>
       )}
       <p className="text-xs text-zinc-500">
-        Output folder: <span className="font-mono break-all">{health.output_dir}</span>
+        Downloads go to: <span className="font-mono break-all">{health.output_dir}</span>
       </p>
     </div>
   )

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { errorMessage, resumeJob } from '../api'
 import { useJobEvents } from '../hooks/useJobEvents'
+import { useJustFinished } from '../hooks/useJustFinished'
 import { BUSY_STATUSES, KEPT_STATUSES, RESUMABLE_STATUSES } from '../types'
 import type { JobStatus, RecordStatus, TrackRecord } from '../types'
+import FinishedBanner from './FinishedBanner'
+import SaveLocation from './SaveLocation'
 import StatusPill from './StatusPill'
 import TrackRow from './TrackRow'
 
@@ -20,6 +23,7 @@ export default function JobView({ jobId, onStatusChange }: Props) {
   const [resuming, setResuming] = useState(false)
   const [resumeError, setResumeError] = useState<string | null>(null)
   const status = job?.status
+  const [finished, dismissFinished] = useJustFinished(status, job?.name)
 
   useEffect(() => {
     if (status) onStatusChange(status)
@@ -66,6 +70,17 @@ export default function JobView({ jobId, onStatusChange }: Props) {
             className={`ml-auto h-2.5 w-2.5 rounded-full ${connected ? 'bg-green-500' : 'bg-zinc-600'}`}
           />
         </div>
+        <SaveLocation path={job.out_dir} jobId={job.id} />
+        {finished && (job.status === 'done' || job.status === 'partial') && (
+          <FinishedBanner
+            jobId={job.id}
+            partial={job.status === 'partial'}
+            kept={kept}
+            total={records.length}
+            outDir={job.out_dir}
+            onDismiss={dismissFinished}
+          />
+        )}
         <div
           role="progressbar"
           aria-label="Tracks complete"
