@@ -39,6 +39,12 @@ def test_health_reports_offline(client: TestClient, monkeypatch: pytest.MonkeyPa
     assert client.get("/api/health").json()["spotify_auth"] == "offline"
 
 
+def test_ping_names_the_app_without_slow_checks(client: TestClient,
+                                                monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    monkeypatch.setattr(auth, "token_status", lambda _s: pytest.fail("ping must not check Spotify"))
+    assert client.get("/api/ping").json() == {"app": "spoteye"}
+
+
 def test_health_reports_yt_dlp_version_and_cookies(client: TestClient) -> None:
     body = client.get("/api/health").json()
     assert isinstance(body["yt_dlp_version"], str) and body["yt_dlp_version"]

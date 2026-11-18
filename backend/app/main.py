@@ -99,6 +99,12 @@ app.include_router(api_tracks.router)
 app.include_router(api_settings.router)
 
 
+@app.get("/api/ping")
+def ping() -> dict[str, str]:
+    """Instant answer for `serve`'s single-instance check (no Spotify, yt-dlp or DB calls)."""
+    return {"app": "spoteye"}
+
+
 @app.get("/api/health", response_model=Health)
 def health() -> Health:
     settings = load_settings()

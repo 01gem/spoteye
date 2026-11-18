@@ -48,7 +48,7 @@ def test_serve_falls_back_to_the_next_free_port(busy_port: int, opened: list[str
 def test_serve_exits_when_spoteye_already_runs(opened: list[str],
                                                monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
     def fake_get(url: str, timeout: float) -> httpx.Response:
-        assert url == "http://127.0.0.1:8000/api/health" and timeout == 1.0
+        assert url == "http://127.0.0.1:8000/api/ping" and timeout == 1.0
         return httpx.Response(200, json={"app": "spoteye"})
 
     monkeypatch.setattr(serve.httpx, "get", fake_get)

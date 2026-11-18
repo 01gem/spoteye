@@ -20,9 +20,9 @@ PORT_TRIES: int = 10  # port, then port+1 .. port+10
 
 
 def is_spoteye(port: int) -> bool:
-    """True if a Spoteye server already answers /api/health on this port."""
+    """True if a Spoteye server already answers /api/ping on this port (instant, unlike health)."""
     try:
-        res = httpx.get(f"http://{HOST}:{port}/api/health", timeout=PROBE_TIMEOUT_S)
+        res = httpx.get(f"http://{HOST}:{port}/api/ping", timeout=PROBE_TIMEOUT_S)
         return res.status_code == 200 and res.json().get("app") == "spoteye"
     except (httpx.HTTPError, ValueError, AttributeError):
         return False
