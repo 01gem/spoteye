@@ -21,6 +21,8 @@ RECORD_STYLE: dict[str, str] = {
     "not_found": "red",
     "review_skipped": "yellow",
     "failed": "bold red",
+    "running": "blue",
+    "stopped": "yellow",
 }
 
 
@@ -38,6 +40,13 @@ def fail(message: str) -> typer.Exit:
     """Print an error and return an Exit to raise."""
     console.print(f"[red]{escape(message)}[/red]")
     return typer.Exit(code=1)
+
+
+def stopped_exit(job_id: int) -> typer.Exit:
+    """Ctrl+C during a job: say how to continue and return an Exit (130 = interrupted)."""
+    console.print(f"[yellow]Stopped.[/yellow] Job {job_id} saved; continue with: "
+                  f"python cli.py resume {job_id}")  # fmt: skip
+    return typer.Exit(code=130)
 
 
 @app.callback()

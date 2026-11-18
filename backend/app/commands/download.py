@@ -10,12 +10,13 @@ import typer
 from rich.markup import escape
 from rich.table import Table
 
-from app.commands import app, console, fail, rich_progress, styled
+from app.commands import app, console, fail, rich_progress, stopped_exit, styled
 from app.config import load_settings
 from app.db import get_session
 from app.models import Job, TrackRecord
 from app.services.filenames import safe_filename
 from app.services.job_runner import create_job, run_job
+from app.services.job_state import JobStopped
 from app.services.link_parser import parse_spotify_link
 from app.services.matcher import Matcher
 from app.services.presets import Preset
@@ -105,9 +106,12 @@ def download(
     with get_session() as session:
         job, records = create_job(session, url, kind, spotify_id, name, preset, target, tracks)
         console.print(f"Job {job.id}: {escape(name)} ({len(records)} tracks, preset {preset.value})")
-        all_records = run_job(
-            session, job, list(zip(records, tracks, strict=True)), Matcher(), settings,
-            accept_review=accept_review, rematch=rematch, max_workers=workers,
-            progress=rich_progress,
-        )  # fmt: skip
+        try:
+            all_records = run_job(
+                session, job, list(zip(records, tracks, strict=True)), Matcher(), settings,
+                accept_review=accept_review, rematch=rematch, max_workers=workers,
+                progress=rich_progress,
+            )  # fmt: skip
+        except JobStopped as exc:
+            raise stopped_exit(exc.job_id) from None
         print_job_summary(job, all_records)

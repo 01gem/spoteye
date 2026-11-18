@@ -12,6 +12,7 @@ from app.commands import app, console, fail
 from app.db import get_session
 from app.models import Job
 from app.services.attach import attach_file
+from app.services.job_state import newer_job_for_folder
 from app.services.link_parser import parse_spotify_link
 from app.services.spotify_client import SpotifyConfigError
 
@@ -36,9 +37,13 @@ def attach(
                 if job is None:
                     raise ValueError(f"Job {job_id} not found.")
             target, record = attach_file(file, track_id, job, session, copy, force=force)
+            playlist = job is not None and job.kind == "playlist"
+            newer = newer_job_for_folder(session, job) if job and playlist else None
     except (ValueError, OSError, SpotifyConfigError, MutagenError) as exc:
         raise fail(str(exc)) from exc
 
     console.print(f"{'Copied' if copy else 'Moved'} to [green]{escape(str(target))}[/green]")
     if job is not None and record is not None:
         console.print(f"Job {job.id} #{record.position:02d} marked manual (job is now {job.status})")
+        if newer is not None:
+            console.print(f"[dim]Reports not rewritten: job {newer.id} is newer for this folder.[/dim]")

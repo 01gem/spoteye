@@ -11,7 +11,8 @@ from sqlmodel import Session, select
 from app.config import Settings, load_settings
 from app.models import Job, TrackRecord, now
 from app.services.filenames import build_filename
-from app.services.job_runner import TrackFetcher, finish_job
+from app.services.job_runner import TrackFetcher
+from app.services.job_state import finish_job
 from app.services.pipeline import fetch_cover
 from app.services.spotify_client import SpotifyClient
 from app.services.tagger import tag_file
@@ -89,5 +90,5 @@ def attach_file(
         record.updated_at = now()
         session.add(record)
         session.commit()
-        finish_job(session, job)  # refresh job status, _missing.txt and .m3u8
+        finish_job(session, job)  # refresh status (+ reports if it is the folder's newest job)
     return target, record

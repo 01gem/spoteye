@@ -5,6 +5,7 @@ Workers never touch the database: they receive plain values and return a TrackRe
 
 from __future__ import annotations
 
+import os
 import random
 import shutil
 import tempfile
@@ -81,7 +82,6 @@ def download_track(item: WorkItem, preset: Preset, out_dir: Path, settings: Sett
     """Download -> transcode -> cover -> tag one matched track (same steps as M3)."""
     track = item.track
     tmp_dir: Path | None = None
-    final: Path | None = None
     try:
         tmp_root = out_dir / TMP_DIR_NAME
         tmp_root.mkdir(parents=True, exist_ok=True)
@@ -90,16 +90,18 @@ def download_track(item: WorkItem, preset: Preset, out_dir: Path, settings: Sett
         selector = PRESET_SPECS[preset].format_selector
         audio = download_audio(item.video_id, tmp_dir, selector, cookies)
         plan = plan_output(preset, audio.acodec, audio.abr)
-        final = out_dir / build_filename(track, plan.ext, item.index)
-        transcode(audio.path, final, plan.ffmpeg_args)
-        tag_file(final, track, fetch_cover(track.cover_url))
+        name = build_filename(track, plan.ext, item.index)
+        staged = tmp_dir / "out" / name  # convert + tag here; the final name appears only complete
+        staged.parent.mkdir()
+        transcode(audio.path, staged, plan.ffmpeg_args)
+        tag_file(staged, track, fetch_cover(track.cover_url))
+        final = out_dir / name
+        os.replace(staged, final)  # same drive (tmp is inside out_dir) -> atomic
         return TrackResult(
             track, "done", path=final, source=describe_source(audio.acodec, audio.abr),
             output=describe_output(plan), upscaled=plan.upscaled,
         )  # fmt: skip
     except Exception as exc:
-        if final is not None:  # never leave a half-written file: the next run would skip it
-            final.unlink(missing_ok=True)
         return TrackResult(track, "failed", error=str(exc) or type(exc).__name__)
     finally:
         if tmp_dir is not None:

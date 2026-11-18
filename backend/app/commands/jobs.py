@@ -1,4 +1,4 @@
-"""Job history commands: `jobs`, `job`, `resume`, `missing`."""
+"""Job history commands: `jobs`, `job`, `resume`, `stop`, `missing`."""
 
 from __future__ import annotations
 
@@ -7,12 +7,14 @@ from rich.markup import escape
 from rich.table import Table
 from sqlmodel import Session, col, select
 
-from app.commands import app, console, fail, rich_progress, styled
+from app.commands import app, console, fail, rich_progress, stopped_exit, styled
 from app.commands.download import print_job_summary
 from app.config import load_settings
 from app.db import get_session
 from app.models import Job, to_local
-from app.services.job_runner import KEPT_STATUSES, job_records, resume_job
+from app.services.job_runner import resume_job
+from app.services.job_state import KEPT_STATUSES, JobStopped, job_records
+from app.services.job_state import newer_job_for_folder, stop_job
 from app.services.matcher import Matcher
 from app.services.reports import missing_lines
 from app.services.spotify_client import SpotifyClient, SpotifyConfigError
@@ -87,11 +89,30 @@ def resume(
         raise fail(str(exc)) from exc
     with get_session() as session:
         found = _get_job(session, job_id)
-        records = resume_job(
-            session, found, client, Matcher(), settings, accept_review=accept_review,
-            rematch=rematch, max_workers=workers, progress=rich_progress,
-        )  # fmt: skip
+        try:
+            records = resume_job(
+                session, found, client, Matcher(), settings, accept_review=accept_review,
+                rematch=rematch, max_workers=workers, progress=rich_progress,
+            )  # fmt: skip
+        except JobStopped as exc:
+            raise stopped_exit(exc.job_id) from None
         print_job_summary(found, records)
+        newer = newer_job_for_folder(session, found) if found.kind == "playlist" else None
+        if newer is not None:
+            console.print(f"[dim]Reports not rewritten: job {newer.id} is newer for this folder.[/dim]")
+
+
+@app.command()
+def stop(job_id: int = typer.Argument(..., help="Job id (see `jobs`).")) -> None:
+    """Mark a job stuck at "running" (closed terminal, killed process) as stopped.
+
+    It does not kill anything: for a job running in another terminal, press Ctrl+C there.
+    """
+    with get_session() as session:
+        found = _get_job(session, job_id)
+        if not stop_job(session, found):
+            raise fail(f"Job {job_id} is not running (status: {found.status}).")
+    console.print(f"Job {job_id}: {styled(found.status)}. Continue with: python cli.py resume {job_id}")
 
 
 @app.command()

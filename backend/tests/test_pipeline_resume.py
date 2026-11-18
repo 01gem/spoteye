@@ -11,7 +11,8 @@ from sqlmodel import Session
 from app.config import Settings
 from app.db import init_db
 from app.services.filenames import build_filename
-from app.services.job_runner import create_job, job_records, resume_job, run_job
+from app.services.job_runner import create_job, resume_job, run_job
+from app.services.job_state import job_records
 from app.services.matcher import Candidate, MatchResult
 from app.services.pipeline import TrackResult, WorkItem
 from app.services.presets import Preset
