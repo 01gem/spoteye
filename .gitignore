@@ -58,3 +58,6 @@ desktop.ini
 !.vscode/extensions.json
 .idea/
 *.log
+
+# ---- Release builds ----
+release/

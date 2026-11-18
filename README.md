@@ -151,6 +151,28 @@ Run from `backend` with the venv active: `python cli.py <command> --help` for ev
 
 Tests: `python -m pytest` (backend), `npm run build` (frontend type check + build).
 
+## Build a release
+
+From `D:\spoteye` (needs the backend venv, Node 20+, and internet for the tool downloads):
+
+```powershell
+.\build.ps1 [-ClientId <id>] [-RefreshTools] [-SkipTests] [-SkipSmoke]
+```
+
+- `-ClientId`: ship a 32-hex Spotify Client ID as the default (add each friend under *User Management*).
+- `-RefreshTools`: download yt-dlp, Deno and FFmpeg again (otherwise `build\tools` is reused).
+- `-SkipTests` / `-SkipSmoke`: skip pytest / the health check of the built exe.
+
+Result: `release\Spoteye-<VERSION>-win64.zip` and its `.sha256`. The version comes from `VERSION`.
+
+## Install (Windows release)
+
+1. Unzip to `%LOCALAPPDATA%\Programs\Spoteye`, **not** Program Files ("Update yt-dlp" must be
+   able to replace `bin\yt-dlp.exe`).
+2. Run `Spoteye.exe`. SmartScreen may warn on the first run: **More info → Run anyway**.
+3. Data lives in `%LOCALAPPDATA%\Spoteye` (settings, sign-in, history, logs). Close the console
+   window to quit.
+
 ## Troubleshooting
 
 Download errors are shown per track in plain words:
@@ -198,7 +220,10 @@ Other problems:
 ```
 spoteye/
 ├── start.ps1                 one-command start
+├── build.ps1, VERSION        Windows release build (PyInstaller onedir + bundled tools)
+├── packaging/                license collector, README shipped in the zip
 ├── backend/
+│   ├── spoteye.spec          PyInstaller spec (entry: spoteye_main.py)
 │   ├── cli.py                CLI entry point (Typer)
 │   ├── .env.example
 │   ├── app/
