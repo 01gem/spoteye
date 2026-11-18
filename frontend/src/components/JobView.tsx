@@ -7,6 +7,7 @@ import type { JobStatus, RecordStatus, TrackRecord } from '../types'
 import FinishedBanner from './FinishedBanner'
 import SaveLocation from './SaveLocation'
 import StatusPill from './StatusPill'
+import StopButton from './StopButton'
 import TrackRow from './TrackRow'
 
 interface Props {
@@ -100,6 +101,7 @@ export default function JobView({ jobId, onStatusChange }: Props) {
               {n} {label}
             </span>
           ))}
+          {busy && <StopButton jobId={job.id} />}
           {RESUMABLE_STATUSES.includes(job.status) && (
             <button
               type="button"

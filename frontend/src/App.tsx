@@ -20,6 +20,14 @@ export default function App() {
     [refreshHistory],
   )
 
+  const onDeleted = useCallback(
+    (jobId: number) => {
+      setSelectedId((current) => (current === jobId ? null : current))
+      refreshHistory()
+    },
+    [refreshHistory],
+  )
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6">
       <header className="space-y-3">
@@ -32,7 +40,12 @@ export default function App() {
         <div className="space-y-6">
           <LinkForm onPreview={setPreview} onCreated={onCreated} />
           {preview && <TrackPreview resolved={preview} />}
-          <JobHistory selectedId={selectedId} onSelect={setSelectedId} refreshKey={historyKey} />
+          <JobHistory
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onDeleted={onDeleted}
+            refreshKey={historyKey}
+          />
         </div>
         <div className="min-w-0">
           {selectedId === null ? (

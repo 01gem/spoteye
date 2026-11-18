@@ -1,43 +1,28 @@
-import { useRef, useState } from 'react'
-import type { ChangeEvent } from 'react'
-import { attachFile, errorMessage, revealFile } from '../api'
+import { useState } from 'react'
+import { errorMessage, revealFile } from '../api'
 import { KEPT_STATUSES, MISSING_STATUSES } from '../types'
 import type { TrackRecord } from '../types'
+import AttachButton from './AttachButton'
+import MatchPicker from './MatchPicker'
 import StatusPill from './StatusPill'
-
-const ACCEPT = '.mp3,.m4a,.opus,.flac,.ogg'
 
 interface Props {
   jobId: number
   record: TrackRecord
-  /** Job is queued or running: the API would answer 409. */
+  /** Job is queued or running: attach and choose would answer 409. */
   attachDisabled: boolean
   onUpdated: (record: TrackRecord) => void
 }
 
+const BUSY_TITLE = 'Wait until the job has finished'
+
 export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [progress, setProgress] = useState<number | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [revealError, setRevealError] = useState<string | null>(null)
+  const [picking, setPicking] = useState(false)
   const revealable = KEPT_STATUSES.includes(record.status) && record.file_name !== null
   const missing = MISSING_STATUSES.includes(record.status)
-  const uploading = progress !== null
-
-  async function onFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    setError(null)
-    setProgress(0)
-    try {
-      onUpdated(await attachFile(jobId, record.id, file, setProgress))
-    } catch (e: unknown) {
-      setError(errorMessage(e))
-    } finally {
-      setProgress(null)
-    }
-  }
+  const pickable = record.status === 'review_skipped' || record.status === 'not_found'
+  const pickerId = `pick-${record.id}`
 
   async function reveal() {
     setRevealError(null)
@@ -63,6 +48,7 @@ export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: P
             </span>
           )}
         </div>
+        {record.error && <p className="text-xs text-red-400">{record.error}</p>}
         <p className="truncate text-xs text-zinc-400">{record.artists}</p>
         <p className="text-xs text-zinc-500">
           {(record.source || record.output) && (
@@ -91,7 +77,6 @@ export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: P
           </div>
         )}
         {revealError && <p className="text-xs text-red-400">{revealError}</p>}
-        {record.error && <p className="text-xs text-red-400">{record.error}</p>}
         {missing && (
           <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
             <a
@@ -102,43 +87,29 @@ export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: P
             >
               Open on Spotify
             </a>
-            <button
-              type="button"
-              disabled={attachDisabled || uploading}
-              onClick={() => inputRef.current?.click()}
-              aria-label={`Attach a file for ${record.title}`}
-              title={attachDisabled ? 'Wait until the job has finished' : undefined}
-              className="rounded border border-zinc-700 px-2 py-1 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Attach file
-            </button>
-            <input
-              ref={inputRef}
-              type="file"
-              accept={ACCEPT}
-              onChange={(e) => void onFile(e)}
-              className="hidden"
-              aria-label={`Audio file for ${record.title}`}
-              tabIndex={-1}
-            />
+            {pickable && (
+              <button
+                type="button"
+                disabled={attachDisabled}
+                onClick={() => setPicking((open) => !open)}
+                aria-expanded={picking}
+                aria-controls={picking ? pickerId : undefined}
+                aria-label={`Pick a YouTube Music match for ${record.title}`}
+                title={attachDisabled ? BUSY_TITLE : undefined}
+                className={`rounded border px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  picking ? 'border-sky-500/60 bg-sky-500/10' : 'border-zinc-700 hover:bg-zinc-800'
+                }`}
+              >
+                Pick match
+              </button>
+            )}
+            <AttachButton jobId={jobId} record={record} disabled={attachDisabled} onUpdated={onUpdated} />
           </div>
         )}
-        {uploading && (
-          <div
-            role="progressbar"
-            aria-label={`Uploading file for ${record.title}`}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(progress * 100)}
-            className="h-1.5 w-full max-w-xs overflow-hidden rounded bg-zinc-800"
-          >
-            <div className="h-full bg-sky-500 transition-[width]" style={{ width: `${progress * 100}%` }} />
+        {picking && pickable && (
+          <div id={pickerId}>
+            <MatchPicker jobId={jobId} record={record} onChosen={() => setPicking(false)} />
           </div>
-        )}
-        {error && (
-          <p role="alert" className="text-xs text-red-400">
-            {error}
-          </p>
         )}
       </div>
     </li>

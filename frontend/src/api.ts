@@ -1,4 +1,5 @@
-import type { Health, JobDetail, JobSummary, Preset, Resolved, TrackRecord } from './types'
+import type { Candidate, Health, JobDetail, JobSummary, Preset, Resolved, StopResult } from './types'
+import type { TrackRecord } from './types'
 
 /** FastAPI errors: {"detail": "text"} or, for validation, {"detail": [{"msg": ...}, ...]}. */
 export function detailText(body: unknown): string | null {
@@ -77,6 +78,24 @@ export const openFolder = (jobId: number): Promise<void> =>
 
 export const revealFile = (jobId: number, recordId: number): Promise<void> =>
   send(`/api/jobs/${jobId}/tracks/${recordId}/reveal`, { method: 'POST' })
+
+export const stopJob = (id: number): Promise<{ result: StopResult }> =>
+  request<{ result: StopResult }>(`/api/jobs/${id}/stop`, { method: 'POST' })
+
+export const deleteJob = (id: number): Promise<void> => send(`/api/jobs/${id}`, { method: 'DELETE' })
+
+export const getCandidates = (jobId: number, recordId: number): Promise<Candidate[]> =>
+  request<Candidate[]>(`/api/jobs/${jobId}/tracks/${recordId}/candidates`)
+
+export const chooseMatch = (
+  jobId: number,
+  recordId: number,
+  videoId: string,
+): Promise<{ job_id: number }> =>
+  request<{ job_id: number }>(
+    `/api/jobs/${jobId}/tracks/${recordId}/choose`,
+    post({ video_id: videoId }),
+  )
 
 export const getMissing = (id: number): Promise<TrackRecord[]> =>
   request<TrackRecord[]>(`/api/jobs/${id}/missing`)

@@ -24,6 +24,9 @@ export interface Health {
   deno: boolean
   spotify_auth: boolean
   output_dir: string
+  yt_dlp_version: string
+  /** COOKIES_FILE is set and the file exists. */
+  cookies: boolean
 }
 
 export interface Preset {
@@ -49,6 +52,21 @@ export interface Resolved {
   target_dir: string
   tracks: ResolvedTrack[]
 }
+
+/** A scored YouTube Music search result for the match picker. */
+export interface Candidate {
+  video_id: string
+  title: string
+  artists: string[]
+  album: string | null
+  duration_s: number | null
+  /** Candidate minus Spotify duration, in seconds. */
+  delta_s: number | null
+  score: number
+  url: string
+}
+
+export type StopResult = 'cancelled' | 'stopping'
 
 export interface JobSummary {
   id: number

@@ -62,6 +62,14 @@ export default function HealthBanner() {
       <p className="text-xs text-zinc-500">
         Downloads go to: <span className="font-mono break-all">{health.output_dir}</span>
       </p>
+      <p className="text-xs text-zinc-500">
+        yt-dlp {health.yt_dlp_version} · cookies {health.cookies ? 'on' : 'off'}
+      </p>
+      {!health.cookies && (
+        <p className="text-xs text-zinc-600">
+          Set COOKIES_FILE in backend/.env if downloads hit YouTube bot checks.
+        </p>
+      )}
     </div>
   )
 }
