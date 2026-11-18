@@ -84,6 +84,7 @@ Spotify signs you out **6 months** after you sign in. Spoteye warns you 2 weeks 
 
 **Playlists:** Spotify only lets apps read playlists you **own or collaborate on**. For anyone else's
 playlist, in Spotify use **Add to other playlist -> New playlist**, then paste the link of your copy.
+This also applies to Spotify-made playlists (Discover Weekly, Daily Mix, "This Is ...").
 
 **Missing tracks:** for tracks marked *not found* or *review*, use **Pick match** to choose the right
 YouTube Music song (or paste a YouTube link), or **Attach file** to add a file you got elsewhere.
@@ -110,9 +111,12 @@ Each playlist folder also gets a `_missing.txt` and a `.m3u8` playlist file.
 | --- | --- |
 | "Set a Spotify Client ID in Settings first" | Do steps 3-4 |
 | Sign-in page says the redirect URI is invalid | The Redirect URI in your Spotify app must be exactly `http://127.0.0.1:8765/callback` |
-| "Spotify only returns tracks for playlists you own…" | Copy the playlist to your library (see Playlists above) |
+| "Spotify only returns tracks for playlists you own…" | Copy the playlist to your library (see Playlists above). Using someone else's Spotify app? Ask them to add you under **User Management** |
 | "Spotify sign-in expired" | Click **Sign in with Spotify** |
-| "Can't reach Spotify" | Check your internet connection, then retry |
+| "Can't reach Spotify" | Check your internet connection, then retry (your sign-in is still fine). A job that stopped for this: **Resume** it |
+| "Spotify is rate-limiting requests" | Wait a minute and try again |
+| "Spotify error 404" | The track or playlist was deleted or the link is wrong |
+| "That YouTube Music upload is unavailable" | Use **Pick match** to choose another upload |
 | "YouTube bot check" | Export `cookies.txt` (Netscape format) from a browser where you're logged in to YouTube, then set it under Settings -> Cookies file. See [yt-dlp's cookie FAQ](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp) |
 | "YouTube refused the download (403)" | Settings -> Update yt-dlp |
 | "Spoteye is already running" | It opened the existing window's page; use that one |
@@ -173,5 +177,20 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 npm --prefix frontend run dev    # http://localhost:5173
 ```
 
+If PowerShell refuses to run scripts: `powershell -ExecutionPolicy Bypass -File .\start.ps1`
+(affects only that run). API docs: `http://127.0.0.1:8000/docs`.
+
 Tests: `python -m pytest` in `backend`. Build a release: `.\build.ps1` in the repo root
 (see README "Build a release").
+
+### Troubleshooting (from source)
+
+| Problem | Fix |
+| --- | --- |
+| "Spotify sign-in needed" / "expired" | `python cli.py login` (the server never opens a sign-in by itself) |
+| Download errors in general, or "YouTube refused the download (403)" | `pip install -U yt-dlp` in the venv, restart the server |
+| "YouTube bot check" | Set `COOKIES_FILE` in `backend\.env` (see Part 1 Troubleshooting for exporting cookies) |
+| "yt-dlp needs Deno" / "FFmpeg not found" | Install it with winget (table above), open a new terminal, restart |
+| "UI not built" when running `serve` | `npm --prefix frontend run build` |
+| 400 "Invalid host header" or 403 "Cross-site request blocked" | Open the UI at `http://127.0.0.1:8000` or `http://localhost:8000`; other host names and writes from other websites are refused on purpose |
+| "database is locked" | Another process has the SQLite file open (e.g. a CLI `download` while the server writes, or a DB viewer). Close it and retry; keep `DB_PATH` off OneDrive/network folders |
