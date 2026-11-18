@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.progress import track as progress
 from rich.table import Table
 
+from app.cli_download import download
 from app.services.link_parser import parse_spotify_link
 from app.services.matcher import Matcher, MatchResult
 from app.services.spotify_client import (
@@ -20,6 +21,7 @@ from app.services.spotify_client import (
 
 app = typer.Typer(help="Spoteye: Spotify metadata tools.", no_args_is_help=True)
 console = Console()
+app.command()(download)
 
 
 @app.callback()

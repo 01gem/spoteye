@@ -92,6 +92,11 @@ class SpotifyClient:
         data: dict[str, Any] = self.sp._get(f"tracks/{track_id}")
         return track_from_json(data)
 
+    def get_playlist_name(self, playlist_id: str) -> str:
+        """Fetch a playlist's name via GET /playlists/{id}?fields=name."""
+        data: dict[str, Any] = self.sp._get(f"playlists/{playlist_id}", fields="name")
+        return data.get("name") or playlist_id
+
     def get_playlist_tracks(self, playlist_id: str) -> list[TrackMeta]:
         """Fetch all tracks in a playlist via paginated GET /playlists/{id}/items."""
         tracks: list[TrackMeta] = []
