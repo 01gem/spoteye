@@ -1,4 +1,4 @@
-"""Sign-in state without network: a fake SpotifyPKCE stands in for spotipy."""
+"""Sign-in state without network: a fake SpotifyPKCE, or the real one with a patched refresh."""
 
 from __future__ import annotations
 
@@ -8,9 +8,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import requests
+from spotipy.oauth2 import SpotifyOauthError, SpotifyPKCE
 
 from app.config import Settings
 from app.services import spotify_auth
+from app.services.spotify_client import SCOPE
 
 SETTINGS = Settings("client", "http://127.0.0.1:8765/callback", Path("out"), None)
 
@@ -62,7 +65,7 @@ def test_missing_with_invalid_cache(cache: Path, content: str) -> None:
     assert FakePKCE.built == 0
 
 
-@pytest.mark.parametrize("result", [None, RuntimeError("invalid_grant: Refresh token revoked")])
+@pytest.mark.parametrize("result", [None, SpotifyOauthError("revoked", error="invalid_grant")])
 def test_expired_when_spotify_refuses(cache: Path, monkeypatch: pytest.MonkeyPatch,
                                       result: Any) -> None:  # fmt: skip
     write_cache(cache, {"refresh_token": "r"})
@@ -91,3 +94,33 @@ def test_sign_in_expiry_is_180_days_after_sign_in(cache: Path) -> None:
     spotify_auth.mark_signed_in(datetime(2026, 11, 18, 12, 0, tzinfo=UTC))
     assert spotify_auth.signed_in_at() == datetime(2026, 11, 18, 12, 0, tzinfo=UTC)
     assert spotify_auth.sign_in_expires_at() == datetime(2027, 5, 17, 12, 0, tzinfo=UTC)
+
+
+def expired_access_token(path: Path) -> None:
+    """A real-looking cache whose access token has run out, so validate_token must refresh."""
+    write_cache(path, {"access_token": "a", "token_type": "Bearer", "expires_in": 3600,
+                       "refresh_token": "r", "scope": SCOPE, "expires_at": 0})  # fmt: skip
+
+
+@pytest.mark.parametrize(("error", "expected"), [
+    (SpotifyOauthError("revoked", error="invalid_grant"), "expired"),
+    (SpotifyOauthError("bad app", error="invalid_client"), "expired"),
+    (requests.ConnectionError("no network"), "offline"),
+    (requests.Timeout("slow"), "offline"),
+    (SpotifyOauthError("oops", error="server_error"), "offline"),
+    (RuntimeError("unexpected"), "offline"),
+])  # fmt: skip
+def test_refresh_error_maps_to_status(cache: Path, monkeypatch: pytest.MonkeyPatch,
+                                      error: Exception, expected: str) -> None:  # fmt: skip
+    calls: list[str] = []
+
+    def refresh(self: SpotifyPKCE, refresh_token: str) -> Any:
+        calls.append(refresh_token)
+        raise error
+
+    monkeypatch.setattr(spotify_auth, "SpotifyPKCE", SpotifyPKCE)  # the real one
+    monkeypatch.setattr(SpotifyPKCE, "refresh_access_token", refresh)
+    expired_access_token(cache)
+    assert spotify_auth.token_status(SETTINGS) == expected
+    assert spotify_auth.token_status(SETTINGS) == expected
+    assert calls == ["r", "r"]  # neither "expired" nor "offline" is cached

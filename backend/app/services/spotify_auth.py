@@ -7,18 +7,22 @@ instead of opening a browser, so only `login` (CLI) is interactive here.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+import requests
 from spotipy.cache_handler import CacheFileHandler
-from spotipy.oauth2 import SpotifyPKCE
+from spotipy.oauth2 import SpotifyOauthError, SpotifyPKCE
 
 from app.config import BACKEND_DIR, CACHE_PATH, Settings
 from app.services.spotify_client import MISSING_CLIENT_ID_MSG, SCOPE, SpotifyConfigError
 
-TokenStatus = Literal["ok", "missing", "expired"]
+TokenStatus = Literal["ok", "missing", "expired", "offline"]
+EXPIRED_ERRORS: frozenset[str] = frozenset({"invalid_grant", "invalid_client"})  # Spotify refused
+log = logging.getLogger(__name__)
 
 SIGN_IN_META: Path = BACKEND_DIR / ".cache-meta.json"  # {"signed_in_at": ISO UTC}
 SIGN_IN_DAYS: int = 180
@@ -48,7 +52,8 @@ def _auth_manager(settings: Settings, open_browser: bool) -> SpotifyPKCE:
 
 
 def token_status(settings: Settings) -> TokenStatus:
-    """"ok", "missing" (never signed in) or "expired" (Spotify refused the cached sign-in).
+    """"ok", "missing" (never signed in), "expired" (Spotify refused the cached sign-in) or
+    "offline" (Spotify unreachable or an unexpected error; not cached, so the next call retries).
 
     Never opens a browser or reads stdin: validate_token only refreshes the token over HTTP.
     """
@@ -60,9 +65,17 @@ def token_status(settings: Settings) -> TokenStatus:
     try:
         auth = _auth_manager(settings, open_browser=False)
         valid = auth.validate_token(auth.cache_handler.get_cached_token())
-    except Exception:
-        valid = None
-    if valid is None:
+    except SpotifyOauthError as exc:
+        if exc.error in EXPIRED_ERRORS:
+            return "expired"
+        log.warning("Spotify sign-in check failed (%s): %s", type(exc).__name__, exc)
+        return "offline"
+    except (requests.ConnectionError, requests.Timeout):
+        return "offline"
+    except Exception as exc:
+        log.warning("Spotify sign-in check failed (%s): %s", type(exc).__name__, exc)
+        return "offline"
+    if valid is None:  # no usable token (e.g. other scopes): only a new login helps
         return "expired"
     _ok_until = time.monotonic() + OK_CACHE_S
     return "ok"

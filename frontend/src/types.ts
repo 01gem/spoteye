@@ -19,8 +19,11 @@ export const MISSING_STATUSES: readonly RecordStatus[] = ['not_found', 'review_s
 export const BUSY_STATUSES: readonly JobStatus[] = ['queued', 'running']
 export const RESUMABLE_STATUSES: readonly JobStatus[] = ['partial', 'failed', 'stopped']
 
-/** missing = never signed in; expired = Spotify ended the sign-in (after about 6 months). */
-export type SpotifyAuth = 'ok' | 'missing' | 'expired'
+/**
+ * missing = never signed in; expired = Spotify ended the sign-in (after about 6 months);
+ * offline = Spotify could not be reached (the sign-in may still be fine).
+ */
+export type SpotifyAuth = 'ok' | 'missing' | 'expired' | 'offline'
 
 export interface Health {
   ffmpeg: boolean

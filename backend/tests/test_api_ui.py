@@ -33,6 +33,11 @@ def test_health_reports_expired_sign_in_and_expiry(client: TestClient, tmp_path:
     assert body["spotify_auth_expires"] == "2026-10-28T10:00:00Z"
 
 
+def test_health_reports_offline(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(auth, "token_status", lambda _settings: "offline")
+    assert client.get("/api/health").json()["spotify_auth"] == "offline"
+
+
 def test_health_reports_yt_dlp_version_and_cookies(client: TestClient) -> None:
     body = client.get("/api/health").json()
     assert isinstance(body["yt_dlp_version"], str) and body["yt_dlp_version"]

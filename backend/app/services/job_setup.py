@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from sqlmodel import Session, col, select
+
+from app.models import Job
 from app.services.filenames import MAX_FOLDER_LEN, safe_filename
 from app.services.link_parser import parse_spotify_link
 from app.services.spotify_client import SpotifyClient, TrackMeta
@@ -50,3 +53,13 @@ def job_target(base: Path, playlist_name: str | None) -> Path:
 def job_name(playlist_name: str | None, tracks: Sequence[TrackMeta], spotify_id: str) -> str:
     first = tracks[0] if tracks else None
     return playlist_name or (f"{', '.join(first.artists)} - {first.title}" if first else spotify_id)
+
+
+def previous_folder(session: Session, kind: str, spotify_id: str) -> Path | None:
+    """out_dir of the newest job for this playlist if that folder still exists (names can change)."""
+    if kind != "playlist":
+        return None
+    query = select(Job).where(Job.kind == "playlist", Job.spotify_id == spotify_id)
+    job = session.exec(query.order_by(col(Job.created_at).desc(), col(Job.id).desc())).first()
+    folder = Path(job.out_dir) if job is not None else None
+    return folder if folder is not None and folder.is_dir() else None

@@ -44,6 +44,13 @@ def test_expired_sign_in_is_401_with_login_hint(client: TestClient,
     assert "python cli.py login" in res.json()["detail"]
 
 
+def test_resolve_while_offline_is_503(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(auth, "token_status", lambda _settings: "offline")
+    res = client.post("/api/resolve", json={"url": PLAYLIST_URL})
+    assert res.status_code == 503
+    assert res.json() == {"detail": "Can't reach Spotify. Check your internet connection and try again."}
+
+
 def test_queued_resume_with_expired_sign_in_fails_the_job(client: TestClient, env: Path,
                                                           monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
     job_id = add_job("partial", env / "music" / "Mix")

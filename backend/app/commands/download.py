@@ -15,7 +15,7 @@ from app.config import load_settings
 from app.db import get_session
 from app.models import Job, TrackRecord
 from app.services.job_runner import create_job, run_job
-from app.services.job_setup import job_name, job_target, load_tracks
+from app.services.job_setup import job_name, job_target, load_tracks, previous_folder
 from app.services.job_state import JobStopped
 from app.services.matcher import Matcher
 from app.services.presets import Preset
@@ -81,9 +81,12 @@ def download(
         raise fail(str(exc)) from exc
 
     kind, spotify_id, tracks = loaded.kind, loaded.spotify_id, loaded.tracks
-    target = job_target(out or settings.output_dir, loaded.playlist_name)
     name = job_name(loaded.playlist_name, tracks, spotify_id)
     with get_session() as session:
+        previous = None if out else previous_folder(session, kind, spotify_id)
+        if previous is not None:
+            console.print(f"Reusing folder: {escape(str(previous))}")
+        target = previous or job_target(out or settings.output_dir, loaded.playlist_name)
         job, records = create_job(session, url, kind, spotify_id, name, preset, target, tracks)
         console.print(f"Job {job.id}: {escape(name)} ({len(records)} tracks, preset {preset.value})")
         try:

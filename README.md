@@ -120,6 +120,8 @@ npm run dev    # http://localhost:5173, proxies /api to port 8000
 ### In the web UI
 
 - Paste a link, **Preview** (shows where the files will be saved), pick a preset, **Download**.
+  A playlist you downloaded before goes back into its existing folder, even if it was renamed
+  on Spotify (the CLI prints "Reusing folder"; `--out` turns this off).
 - Watch progress live. **Stop** (click twice) halts a job; tracks already downloading finish.
   **Resume** picks it up again; existing files are skipped.
 - For a *not found*, *review* or *failed* track: **Pick match** shows the top YouTube Music candidates
@@ -171,6 +173,8 @@ Other problems:
   once in a terminal. The server never opens a sign-in browser by itself.
 - **"Spotify sign-in expired"**: Spotify ends every sign-in after 6 months. Run
   `python cli.py login`, then reload the page.
+- **"Can't reach Spotify"** (gray notice, API 503): no connection to Spotify right now. Check the
+  internet connection and retry; your sign-in is still fine, no login needed.
 - **400 "Invalid host header"** or **403 "Cross-site request blocked"**: open the UI at
   `http://127.0.0.1:8000` or `http://localhost:8000`. Other host names and writes from other
   websites are refused on purpose.

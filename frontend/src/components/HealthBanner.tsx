@@ -24,18 +24,31 @@ const LOGIN_CMD = 'python cli.py login'
 const EXPIRY_WARN_DAYS = 14
 const DAY_MS = 86_400_000
 
-interface SignInNotice {
-  expired: boolean
-  text: string
+type Tone = 'red' | 'amber' | 'zinc'
+
+const TONE_CLASS: Record<Tone, string> = {
+  red: 'border-red-500/40 bg-red-500/10 text-red-200',
+  amber: 'border-amber-500/40 bg-amber-500/10 text-amber-100',
+  zinc: 'border-zinc-700 bg-zinc-800/60 text-zinc-300',
 }
 
-/** Red once Spotify ended the sign-in, amber during its last two weeks. */
+interface SignInNotice {
+  tone: Tone
+  text: string
+  /** Show the `python cli.py login` command after the text. */
+  login: boolean
+}
+
+/** Red once Spotify ended the sign-in, amber during its last two weeks, gray when unreachable. */
 function signInNotice(health: Health): SignInNotice | null {
-  if (health.spotify_auth === 'expired') return { expired: true, text: 'Spotify sign-in expired:' }
+  if (health.spotify_auth === 'expired') return { tone: 'red', text: 'Spotify sign-in expired:', login: true }
+  if (health.spotify_auth === 'offline') {
+    return { tone: 'zinc', text: "Can't reach Spotify right now (offline?)", login: false }
+  }
   if (health.spotify_auth !== 'ok' || !health.spotify_auth_expires) return null
   const expires = new Date(health.spotify_auth_expires)
   if (expires.getTime() - Date.now() > EXPIRY_WARN_DAYS * DAY_MS) return null
-  return { expired: false, text: `Spotify sign-in expires on ${expires.toLocaleDateString()}: run` }
+  return { tone: 'amber', text: `Spotify sign-in expires on ${expires.toLocaleDateString()}: run`, login: true }
 }
 
 export default function HealthBanner() {
@@ -68,14 +81,16 @@ export default function HealthBanner() {
     <div className="space-y-2">
       {notice && (
         <div
-          role="alert"
-          className={`rounded-lg border p-3 text-sm ${
-            notice.expired
-              ? 'border-red-500/40 bg-red-500/10 text-red-200'
-              : 'border-amber-500/40 bg-amber-500/10 text-amber-100'
-          }`}
+          role={notice.tone === 'zinc' ? 'status' : 'alert'}
+          className={`rounded-lg border p-3 text-sm ${TONE_CLASS[notice.tone]}`}
         >
-          {notice.text} <code className="rounded bg-black/30 px-1.5 py-0.5 font-mono">{LOGIN_CMD}</code>
+          {notice.text}
+          {notice.login && (
+            <>
+              {' '}
+              <code className="rounded bg-black/30 px-1.5 py-0.5 font-mono">{LOGIN_CMD}</code>
+            </>
+          )}
         </div>
       )}
       {missing.length > 0 && (

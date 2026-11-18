@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from sqlmodel import Session, col, select
@@ -10,7 +12,7 @@ from app.config import Settings, load_settings
 from app.db import get_session
 from app.models import Job
 from app.services.job_runner import create_job
-from app.services.job_setup import LoadedTracks, job_name, job_target, load_tracks
+from app.services.job_setup import LoadedTracks, job_name, job_target, load_tracks, previous_folder
 from app.services.job_state import delete_job, job_records
 from app.services.spotify_client import PlaylistNotAccessible, SpotifyConfigError
 from app.web import auth
@@ -63,6 +65,13 @@ async def _load(url: str) -> tuple[LoadedTracks, Settings]:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+def _target(settings: Settings, loaded: LoadedTracks) -> Path:
+    """Same folder for the preview and create(): the playlist's earlier folder, else a new one."""
+    with get_session() as session:
+        previous = previous_folder(session, loaded.kind, loaded.spotify_id)
+    return previous or job_target(settings.output_dir, loaded.playlist_name)
+
+
 @router.post("/resolve", response_model=Resolved)
 async def resolve(body: ResolveIn) -> Resolved:
     loaded, settings = await _load(body.url)
@@ -72,14 +81,14 @@ async def resolve(body: ResolveIn) -> Resolved:
         for i, t in enumerate(loaded.tracks, start=1)
     ]  # fmt: skip
     name = job_name(loaded.playlist_name, loaded.tracks, loaded.spotify_id)
-    target = job_target(settings.output_dir, loaded.playlist_name)  # same folder create() uses
+    target = await run_in_threadpool(_target, settings, loaded)  # same folder create() uses
     return Resolved(kind=loaded.kind, name=name, target_dir=str(target), tracks=tracks)
 
 
 @router.post("/jobs", status_code=201, response_model=JobCreated)
 async def create(body: JobIn, request: Request) -> JobCreated:
     loaded, settings = await _load(body.url)
-    target = job_target(settings.output_dir, loaded.playlist_name)  # never a client-given path
+    target = await run_in_threadpool(_target, settings, loaded)  # never a client-given path
     name = job_name(loaded.playlist_name, loaded.tracks, loaded.spotify_id)
 
     def insert() -> int:

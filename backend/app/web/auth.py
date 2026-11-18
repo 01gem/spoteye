@@ -18,10 +18,16 @@ NEED_TOKEN_MSG: str = (
 EXPIRED_MSG: str = (
     "Spotify sign-in expired (Spotify limits sign-ins to 6 months). Run: python cli.py login"
 )
+OFFLINE_MSG: str = "Can't reach Spotify. Check your internet connection and try again."
+SIGN_IN_ERRORS: dict[str, tuple[int, str]] = {
+    "missing": (401, NEED_TOKEN_MSG),
+    "expired": (401, EXPIRED_MSG),
+    "offline": (503, OFFLINE_MSG),
+}
 
 
 def sign_in_message(status: TokenStatus) -> str:
-    return EXPIRED_MSG if status == "expired" else NEED_TOKEN_MSG
+    return SIGN_IN_ERRORS[status][1]
 
 
 def has_spotify_token() -> bool:
@@ -29,13 +35,14 @@ def has_spotify_token() -> bool:
 
 
 def require_spotify_auth(settings: Settings) -> None:
-    """HTTP 401 unless the cached sign-in is usable (never opens a browser)."""
+    """HTTP 401 (missing/expired) or 503 (offline) unless the sign-in is usable; never opens a browser."""
     status = token_status(settings)
     if status != "ok":
-        raise HTTPException(status_code=401, detail=sign_in_message(status))
+        code, message = SIGN_IN_ERRORS[status]
+        raise HTTPException(status_code=code, detail=message)
 
 
 def require_spotify_client(settings: Settings) -> SpotifyClient:
-    """SpotifyClient for a request, or HTTP 401 when the sign-in is missing or expired."""
+    """SpotifyClient for a request, or HTTP 401/503 (see require_spotify_auth)."""
     require_spotify_auth(settings)
     return SpotifyClient(settings)
