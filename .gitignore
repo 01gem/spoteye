@@ -28,11 +28,15 @@ dist/
 
 # ---- App data / downloaded media ----
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 downloads/
 output/
 temp/
+.spoteye_tmp/
 *.mp3
 *.m4a
 *.opus
