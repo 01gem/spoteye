@@ -20,6 +20,7 @@ from spotipy.oauth2 import SpotifyOauthError, SpotifyPKCE
 from app.config import CACHE_PATH, SIGN_IN_META_PATH, Settings
 from app.services.spotify_client import MISSING_CLIENT_ID_MSG, SCOPE, SpotifyConfigError
 from app.services.spotify_errors import EXPIRED_ERRORS
+from app.services.spotify_login import LOGIN_TIMEOUT_S, local_port, wait_for_code
 
 TokenStatus = Literal["ok", "missing", "expired", "offline"]
 log = logging.getLogger(__name__)
@@ -107,10 +108,13 @@ def sign_in_expires_at() -> datetime | None:
     return start + timedelta(days=SIGN_IN_DAYS) if start else None
 
 
-def login(settings: Settings) -> None:
+def login(settings: Settings, timeout_s: float = LOGIN_TIMEOUT_S) -> None:
     """Interactive sign-in (CLI, or the API's background thread): opens the browser and waits
     for Spotify's redirect on the redirect URI port."""
     if not settings.spotify_client_id:
         raise SpotifyConfigError(MISSING_CLIENT_ID_MSG)
-    _auth_manager(settings, open_browser=True).get_access_token(check_cache=False)
+    auth = _auth_manager(settings, open_browser=True)
+    port = local_port(settings.spotify_redirect_uri)
+    code = wait_for_code(auth, port, timeout_s) if port else None  # None: spotipy's paste-the-URL flow
+    auth.get_access_token(code=code, check_cache=False)
     mark_signed_in()
