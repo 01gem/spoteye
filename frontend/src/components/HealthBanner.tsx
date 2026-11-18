@@ -1,17 +1,21 @@
-import { useEffect, useState } from 'react'
-import { errorMessage, getHealth } from '../api'
 import type { Health } from '../types'
 import SignInButton from './SignInButton'
 
 interface Problem {
   what: string
   fix: string
+  /** Show `fix` as a command (source mode) rather than as plain text. */
+  command: boolean
 }
 
 function problems(health: Health): Problem[] {
+  const tool = (what: string, winget: string): Problem =>
+    health.frozen
+      ? { what, fix: 'Bundled tool missing: reinstall Spoteye', command: false }
+      : { what, fix: winget, command: true }
   const list: Problem[] = []
-  if (!health.ffmpeg) list.push({ what: 'FFmpeg not found', fix: 'winget install Gyan.FFmpeg' })
-  if (!health.deno) list.push({ what: 'Deno not found', fix: 'winget install DenoLand.Deno' })
+  if (!health.ffmpeg) list.push(tool('FFmpeg not found', 'winget install Gyan.FFmpeg'))
+  if (!health.deno) list.push(tool('Deno not found', 'winget install DenoLand.Deno'))
   return list
 }
 
@@ -48,26 +52,27 @@ function signInNotice(health: Health): SignInNotice | null {
   return { tone: 'amber', text: `Spotify sign-in expires on ${expires.toLocaleDateString()}.`, login: true }
 }
 
-export default function HealthBanner() {
-  const [health, setHealth] = useState<Health | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [reload, setReload] = useState(0) // bumped after a sign-in to re-read health
+interface Props {
+  health: Health | null
+  /** The backend could not be reached. */
+  error: string | null
+  /** SetupCard is showing its own sign-in step: skip the "missing" notice. */
+  hideMissingSignIn: boolean
+  onRefresh: () => void
+}
 
-  useEffect(() => {
-    let cancelled = false
-    getHealth()
-      .then((h) => !cancelled && setHealth(h))
-      .catch((e: unknown) => !cancelled && setError(errorMessage(e)))
-    return () => {
-      cancelled = true
-    }
-  }, [reload])
-
+export default function HealthBanner({ health, error, hideMissingSignIn, onRefresh }: Props) {
   if (error) {
     return (
       <div role="alert" className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
-        Backend not reachable ({error}). Start it with{' '}
-        <code className="font-mono">uvicorn app.main:app --host 127.0.0.1 --port 8000</code>
+        {import.meta.env.DEV ? (
+          <>
+            Backend not reachable ({error}). Start it with{' '}
+            <code className="font-mono">uvicorn app.main:app --host 127.0.0.1 --port 8000</code>
+          </>
+        ) : (
+          "Spoteye isn't running. Start Spoteye.exe again."
+        )}
       </div>
     )
   }
@@ -75,15 +80,16 @@ export default function HealthBanner() {
 
   const missing = problems(health)
   const notice = signInNotice(health)
+  const showNotice = notice !== null && !(hideMissingSignIn && health.spotify_auth === 'missing')
   return (
     <div className="space-y-2">
-      {notice && (
+      {showNotice && notice && (
         <div
           role={notice.tone === 'zinc' ? 'status' : 'alert'}
           className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border p-3 text-sm ${TONE_CLASS[notice.tone]}`}
         >
           <span>{notice.text}</span>
-          {notice.login && <SignInButton onFinished={() => setReload((n) => n + 1)} />}
+          {notice.login && <SignInButton onFinished={onRefresh} />}
         </div>
       )}
       {missing.length > 0 && (
@@ -92,7 +98,8 @@ export default function HealthBanner() {
           <ul className="space-y-1">
             {missing.map((p) => (
               <li key={p.what}>
-                {p.what}: <code className="rounded bg-black/30 px-1.5 py-0.5 font-mono">{p.fix}</code>
+                {p.what}:{' '}
+                {p.command ? <code className="rounded bg-black/30 px-1.5 py-0.5 font-mono">{p.fix}</code> : p.fix}
               </li>
             ))}
           </ul>
@@ -104,11 +111,6 @@ export default function HealthBanner() {
       <p className="text-xs text-zinc-500">
         yt-dlp {health.yt_dlp_version} · cookies {health.cookies ? 'on' : 'off'}
       </p>
-      {!health.cookies && (
-        <p className="text-xs text-zinc-600">
-          Set COOKIES_FILE in backend/.env if downloads hit YouTube bot checks.
-        </p>
-      )}
     </div>
   )
 }

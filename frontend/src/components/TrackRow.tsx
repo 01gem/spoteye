@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { errorMessage, revealFile } from '../api'
+import { trackErrorText } from '../messages'
 import { KEPT_STATUSES, MISSING_STATUSES } from '../types'
 import type { TrackRecord } from '../types'
 import AttachButton from './AttachButton'
@@ -49,7 +50,7 @@ export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: P
             </span>
           )}
         </div>
-        {record.error && <p className="text-xs text-red-400">{record.error}</p>}
+        {record.error && <p className="text-xs text-red-400">{trackErrorText(record.error)}</p>}
         <p className="truncate text-xs text-zinc-400">{record.artists}</p>
         <p className="text-xs text-zinc-500">
           {(record.source || record.output) && (

@@ -26,6 +26,9 @@ export const RESUMABLE_STATUSES: readonly JobStatus[] = ['partial', 'failed', 's
 export type SpotifyAuth = 'ok' | 'missing' | 'expired' | 'offline'
 
 export interface Health {
+  /** Running from Spoteye.exe (PyInstaller) rather than from source. */
+  frozen: boolean
+  yt_dlp_mode: 'binary' | 'library'
   ffmpeg: boolean
   deno: boolean
   spotify_auth: SpotifyAuth

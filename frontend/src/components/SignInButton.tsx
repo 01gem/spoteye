@@ -12,7 +12,13 @@ const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
  * /api/auth/status. Clicking again restarts (the backend replaces the pending attempt).
  * onFinished runs when a sign-in ends without an error (the caller re-reads health).
  */
-export default function SignInButton({ onFinished }: { onFinished: () => void }) {
+interface Props {
+  onFinished: () => void
+  label?: string
+  disabled?: boolean
+}
+
+export default function SignInButton({ onFinished, label = 'Sign in with Spotify', disabled = false }: Props) {
   const [waiting, setWaiting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Bumped by every start, cancel and unmount: a poll from an older attempt is ignored.
@@ -76,9 +82,10 @@ export default function SignInButton({ onFinished }: { onFinished: () => void })
       <button
         type="button"
         onClick={() => void start()}
-        className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-500"
+        disabled={disabled}
+        className="rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Sign in with Spotify
+        {label}
       </button>
       {waiting && (
         <>

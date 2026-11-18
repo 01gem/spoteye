@@ -32,7 +32,7 @@ async function fail(res: Response): Promise<never> {
   throw new Error(message)
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init)
   if (!res.ok) await fail(res)
   return (await res.json()) as T
