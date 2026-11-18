@@ -1,0 +1,56 @@
+# ---- Secrets (never commit) ----
+.env
+.env.*
+!.env.example
+.cache
+.cache-*
+*.cache
+cookies*.txt
+*.pem
+*.key
+token*.json
+credentials*.json
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# ---- App data / downloaded media ----
+*.db
+*.sqlite
+*.sqlite3
+downloads/
+output/
+temp/
+*.mp3
+*.m4a
+*.opus
+*.flac
+*.webm
+*.wav
+*.part
+*.ytdl
+
+# ---- Frontend (future) ----
+node_modules/
+frontend/dist/
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log

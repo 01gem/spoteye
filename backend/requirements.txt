@@ -1,0 +1,13 @@
+spotipy
+ytmusicapi
+yt-dlp
+mutagen
+rapidfuzz
+fastapi
+uvicorn[standard]
+sqlmodel
+typer
+rich
+httpx
+python-dotenv
+pytest
