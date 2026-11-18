@@ -18,6 +18,7 @@ from app.services.job_state import delete_job, newer_job_for_folder, stop_job
 from app.services.matcher import Matcher
 from app.services.reports import missing_lines
 from app.services.spotify_client import SpotifyClient, SpotifyConfigError
+from app.services.spotify_errors import SPOTIFY_ERRORS, spotify_error_message
 from app.services.transcoder import ensure_ffmpeg
 
 RECENT_JOBS: int = 20
@@ -96,6 +97,8 @@ def resume(
             )  # fmt: skip
         except JobStopped as exc:
             raise stopped_exit(exc.job_id) from None
+        except SPOTIFY_ERRORS as exc:  # fetching the tracks happens before the job is "running"
+            raise fail(spotify_error_message(exc)) from exc
         print_job_summary(found, records)
         newer = newer_job_for_folder(session, found) if found.kind == "playlist" else None
         if newer is not None:

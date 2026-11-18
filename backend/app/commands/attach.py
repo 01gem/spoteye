@@ -15,6 +15,7 @@ from app.services.attach import attach_file
 from app.services.job_state import newer_job_for_folder
 from app.services.link_parser import parse_spotify_link
 from app.services.spotify_client import SpotifyConfigError
+from app.services.spotify_errors import SPOTIFY_ERRORS, spotify_error_message
 
 
 @app.command()
@@ -39,6 +40,8 @@ def attach(
             target, record = attach_file(file, track_id, job, session, copy, force=force)
             playlist = job is not None and job.kind == "playlist"
             newer = newer_job_for_folder(session, job) if job and playlist else None
+    except SPOTIFY_ERRORS as exc:  # first: requests.ConnectionError is also an OSError
+        raise fail(spotify_error_message(exc)) from exc
     except (ValueError, OSError, SpotifyConfigError, MutagenError) as exc:
         raise fail(str(exc)) from exc
 

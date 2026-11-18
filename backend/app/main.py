@@ -5,16 +5,20 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 from collections.abc import AsyncIterator
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+import requests
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from spotipy.exceptions import SpotifyException
 from sqlmodel import col, select
 from yt_dlp.version import __version__ as YT_DLP_VERSION
 
@@ -23,6 +27,7 @@ from app.db import get_session, init_db
 from app.models import Job, now
 from app.services.presets import PRESET_SPECS
 from app.services.spotify_auth import sign_in_expires_at
+from app.services.spotify_errors import is_spotify_unreachable, spotify_error_message
 from app.web import api_files, api_jobs, api_stream, api_tracks, auth
 from app.web.events import EventBus
 from app.web.job_queue import JobQueue
@@ -33,6 +38,7 @@ from app.web.security import OriginCheckMiddleware
 RUN_OPTIONS: dict[str, Any] = {}
 ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 ALLOWED_HOSTS: list[str] = ["127.0.0.1", "localhost"]
+log = logging.getLogger(__name__)
 
 
 def mark_interrupted_jobs() -> int:
@@ -68,6 +74,21 @@ app.add_middleware(
 app.add_middleware(OriginCheckMiddleware, allowed_origins=ALLOWED_ORIGINS)
 # Added last = runs first: other Host names (DNS rebinding) get 400 before anything else.
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
+
+
+async def spotify_error(request: Request, exc: Exception) -> JSONResponse:
+    """503 when Spotify is unreachable or rate-limiting, 502 for its other errors (no traceback).
+
+    Also catches errors re-raised from run_in_threadpool, so every endpoint is covered.
+    """
+    unreachable = is_spotify_unreachable(exc) or not isinstance(exc, SpotifyException)
+    log.warning("%s %s: Spotify request failed (%s): %s", request.method, request.url.path,
+                type(exc).__name__, exc)  # fmt: skip
+    return JSONResponse({"detail": spotify_error_message(exc)}, status_code=503 if unreachable else 502)
+
+
+app.add_exception_handler(requests.RequestException, spotify_error)
+app.add_exception_handler(SpotifyException, spotify_error)
 app.include_router(api_jobs.router)
 app.include_router(api_stream.router)
 app.include_router(api_files.router)

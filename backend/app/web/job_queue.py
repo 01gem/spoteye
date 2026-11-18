@@ -15,6 +15,7 @@ from app.services.job_runner import resume_job, run_job
 from app.services.job_state import JobStopped, job_records
 from app.services.matcher import Matcher
 from app.services.spotify_client import SpotifyClient, TrackMeta
+from app.services.spotify_errors import log_failure
 from app.web import auth
 from app.web.events import EventBus, job_event, record_event
 
@@ -103,8 +104,8 @@ class JobQueue:
                     self._run(job_id, kind, options, event)
             except JobStopped:
                 self._publish(job_id)  # run_job already saved "stopped"
-            except Exception:
-                log.exception("Job %s crashed", job_id)
+            except Exception as exc:
+                log_failure(log, exc, f"Job {job_id} failed")  # lost connection: no traceback
                 try:
                     self._set_status(job_id, "failed", finished=True)
                 except Exception:

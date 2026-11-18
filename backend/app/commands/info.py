@@ -5,8 +5,9 @@ from __future__ import annotations
 import typer
 from rich.table import Table
 
-from app.commands import app, console
+from app.commands import app, console, fail
 from app.services import spotify_auth
+from app.services.spotify_errors import SPOTIFY_ERRORS, spotify_error_message
 from app.services.link_parser import parse_spotify_link
 from app.services.spotify_client import (
     PlaylistNotAccessible,
@@ -59,6 +60,8 @@ def info(url: str = typer.Argument(..., help="Spotify track or playlist URL/URI.
             tracks = [client.get_track(spotify_id)]
         else:
             tracks = client.get_playlist_tracks(spotify_id)
+    except SPOTIFY_ERRORS as exc:
+        raise fail(spotify_error_message(exc)) from exc
     except (SpotifyConfigError, PlaylistNotAccessible) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc

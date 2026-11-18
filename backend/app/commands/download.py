@@ -20,6 +20,7 @@ from app.services.job_state import JobStopped
 from app.services.matcher import Matcher
 from app.services.presets import Preset
 from app.services.spotify_client import PlaylistNotAccessible, SpotifyConfigError
+from app.services.spotify_errors import SPOTIFY_ERRORS, spotify_error_message
 from app.services.transcoder import ensure_ffmpeg
 
 
@@ -77,6 +78,8 @@ def download(
         ensure_ffmpeg()
         settings = load_settings()
         loaded = load_tracks(url, limit)
+    except SPOTIFY_ERRORS as exc:  # first: some requests errors are also ValueErrors
+        raise fail(spotify_error_message(exc)) from exc
     except (RuntimeError, ValueError, SpotifyConfigError, PlaylistNotAccessible) as exc:
         raise fail(str(exc)) from exc
 

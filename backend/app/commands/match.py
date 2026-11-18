@@ -8,7 +8,7 @@ import typer
 from rich.progress import track as progress
 from rich.table import Table
 
-from app.commands import app, console
+from app.commands import app, console, fail
 from app.services.link_parser import parse_spotify_link
 from app.services.matcher import Matcher, MatchResult
 from app.services.spotify_client import (
@@ -17,6 +17,7 @@ from app.services.spotify_client import (
     SpotifyConfigError,
     TrackMeta,
 )
+from app.services.spotify_errors import SPOTIFY_ERRORS, spotify_error_message
 
 STATUS_STYLE: dict[str, str] = {"matched": "green", "review": "yellow", "not_found": "red"}
 YTM_URL: str = "https://music.youtube.com/watch?v={video_id}"
@@ -32,6 +33,8 @@ def _fetch_tracks(url: str) -> list[TrackMeta]:
         if kind == "track":
             return [client.get_track(spotify_id)]
         return client.get_playlist_tracks(spotify_id)
+    except SPOTIFY_ERRORS as exc:  # first: some requests errors are also ValueErrors
+        raise fail(spotify_error_message(exc)) from exc
     except (ValueError, SpotifyConfigError, PlaylistNotAccessible) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
