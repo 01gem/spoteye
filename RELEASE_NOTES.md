@@ -16,7 +16,7 @@ Spotify only returns tracks for playlists you own or collaborate on.
 
 **Bundled:** yt-dlp 2026.10.26, Deno 2.9.8, FFmpeg n9.0.2 (LGPL build). If downloads fail later: Settings -> Update yt-dlp.
 
-**SHA-256** (Spoteye-1.1.0-win64.zip): `<filled in after build>`
+**SHA-256** (Spoteye-1.1.0-win64.zip): `01a4fed00e056d9c8ab9c250d68e01407a03bbf7c5fe31fb5202bf9e96a2d92d`
 
 Licensed GPL-3.0-or-later. Third-party licenses are in the zip's `licenses\` folder; source code for the bundled
 Python packages is available from https://pypi.org at the versions listed in `licenses\python\THIRD_PARTY.md`.
