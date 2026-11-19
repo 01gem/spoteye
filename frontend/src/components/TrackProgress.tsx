@@ -7,13 +7,15 @@ const LABELS: Record<ProgressPhase, string> = {
   converting: 'Converting…',
   tagging: 'Tagging…',
 }
-const MB = 1024 * 1024
+const KB = 1024
 
-/** KB or MB with 1 decimal. */
+/** 1 decimal: KB below 1000 KB, MB from there (1023 KB reads "1.0 MB"). */
 function formatBytes(bytes: number): string {
-  return bytes >= MB ? `${(bytes / MB).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`
+  const kb = bytes / KB
+  return kb >= 999.95 ? `${(kb / KB).toFixed(1)} MB` : `${kb.toFixed(1)} KB` // never "1000.0 KB"
 }
 
+/** Same KB/MB rule as formatBytes. */
 function formatSpeed(bytesPerSecond: number): string {
   return `${formatBytes(bytesPerSecond)}/s`
 }

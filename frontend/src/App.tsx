@@ -7,13 +7,14 @@ import LinkForm from './components/LinkForm'
 import SettingsPanel from './components/SettingsPanel'
 import SetupCard from './components/SetupCard'
 import TrackPreview from './components/TrackPreview'
+import { useJobHash } from './hooks/useJobHash'
 import { getSettings } from './settingsApi'
 import type { Settings } from './settingsApi'
 import type { Health, Resolved } from './types'
 
 export default function App() {
   const [preview, setPreview] = useState<Resolved | null>(null)
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedId, setSelectedId] = useJobHash()
   const [historyKey, setHistoryKey] = useState(0)
   const [health, setHealth] = useState<Health | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const ARMED_MS = 4000
+export const ARMED_MS = 4000
 
 /**
  * Two-click confirm without dialogs: arm(key) on the first click, act when armed === key on the

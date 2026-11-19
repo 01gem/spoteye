@@ -48,9 +48,14 @@ function Step([string]$text) { Write-Host "`n==> $text" -ForegroundColor Cyan }
 function Fail([string]$text) { throw "BUILD FAILED: $text" }
 
 function Invoke-Checked {
-    # Run a native command and stop on a non-zero exit code (5.1 doesn't do this by itself).
+    # Run a native command; success is judged by $LASTEXITCODE only. Windows PowerShell 5.1 turns
+    # stderr lines into error records when output is redirected (*>&1, Tee-Object), and under
+    # 'Stop' the first one (e.g. an npm notice) would end the build, so the call runs under
+    # 'Continue'. Returns the command's output.
     param([string]$What, [scriptblock]$Command)
-    & $Command
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & $Command } finally { $ErrorActionPreference = $saved }
     if ($LASTEXITCODE -ne 0) { Fail "$What (exit code $LASTEXITCODE)" }
 }
 
@@ -148,7 +153,7 @@ if ($RefreshTools -or -not (Test-Path $YtDlp) -or -not (Test-Path (Join-Path $To
     Get-Url 'https://raw.githubusercontent.com/yt-dlp/yt-dlp/master/LICENSE' (Join-Path $ToolLic 'yt-dlp-LICENSE.txt')
     Move-Item $download $YtDlp -Force
 }
-$Versions['yt-dlp'] = (& $YtDlp --version).Trim()
+$Versions['yt-dlp'] = (Invoke-Checked 'yt-dlp --version' { & $YtDlp --version }).Trim()
 
 # Deno: zip + .sha256sum next to it
 if ($RefreshTools -or -not (Test-Path $Deno)) {
@@ -161,7 +166,7 @@ if ($RefreshTools -or -not (Test-Path $Deno)) {
     Copy-Item (Join-Path $Tmp 'deno\deno.exe') $Deno -Force
     Get-Url 'https://raw.githubusercontent.com/denoland/deno/main/LICENSE.md' (Join-Path $ToolLic 'deno-LICENSE.md')
 }
-$Versions['deno'] = ((& $Deno --version) | Select-Object -First 1).Trim()
+$Versions['deno'] = ((Invoke-Checked 'deno --version' { & $Deno --version }) | Select-Object -First 1).Trim()
 
 # FFmpeg: BtbN static LGPL build from a stable branch (never "gpl", never "shared")
 if ($RefreshTools -or -not (Test-Path $Ffmpeg)) {
@@ -196,11 +201,11 @@ if ($RefreshTools -or -not (Test-Path $Ffmpeg)) {
     ) | Set-Content (Join-Path $ToolLic 'ffmpeg-BUILD.txt') -Encoding UTF8
     $Versions['ffmpeg-asset'] = $name
 }
-$encoders = (& $Ffmpeg -hide_banner -encoders) -join "`n"
+$encoders = (Invoke-Checked 'ffmpeg -encoders' { & $Ffmpeg -hide_banner -encoders }) -join "`n"
 foreach ($enc in 'libmp3lame', 'libopus', 'aac') {
     if ($encoders -notmatch "(?m)^\s*A\S*\s+$enc\s") { Fail "ffmpeg is missing the '$enc' encoder (Spoteye needs libmp3lame, libopus and aac)" }
 }
-$Versions['ffmpeg'] = ((& $Ffmpeg -hide_banner -version) | Select-Object -First 1).Trim()
+$Versions['ffmpeg'] = ((Invoke-Checked 'ffmpeg -version' { & $Ffmpeg -hide_banner -version }) | Select-Object -First 1).Trim()
 $Versions | ConvertTo-Json | Set-Content $VersionsFile -Encoding UTF8
 $Versions.GetEnumerator() | Sort-Object Name | ForEach-Object { Write-Host ("    {0,-13} {1}" -f $_.Name, $_.Value) }
 

@@ -22,6 +22,16 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** A non-2xx response; status tells "not found" apart from other failures. */
+export class HttpError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function fail(res: Response): Promise<never> {
   let message = `${res.status} ${res.statusText}`.trim()
   try {
@@ -29,7 +39,7 @@ async function fail(res: Response): Promise<never> {
   } catch {
     // not JSON (e.g. the dev proxy could not reach the backend)
   }
-  throw new Error(message)
+  throw new HttpError(res.status, message)
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
