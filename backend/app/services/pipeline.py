@@ -18,12 +18,14 @@ from pathlib import Path
 from typing import Literal
 
 from app.config import Settings
+from app.services import progress
 from app.services.downloader import download_audio, fetch_cover
 from app.services.errors import friendly_error
 from app.services.filenames import build_filename, existing_output
 from app.services.match_cache import match_all
 from app.services.presets import PRESET_SPECS, Preset, describe_output, describe_source
 from app.services.presets import plan_output
+from app.services.progress import ProgressFn
 from app.services.spotify_client import TrackMeta
 from app.services.tagger import tag_file
 from app.services.transcoder import transcode
@@ -75,7 +77,9 @@ def download_track(item: WorkItem, preset: Preset, out_dir: Path, settings: Sett
         # final name appears only complete.
         staged = tmp_dir / "out" / f"track.{plan.ext}"
         staged.parent.mkdir()
+        progress.report("converting")
         transcode(audio.path, staged, plan.ffmpeg_args)
+        progress.report("tagging")
         tag_file(staged, track, fetch_cover(track.cover_url))
         final = out_dir / name
         os.replace(staged, final)  # same drive (tmp is inside out_dir) -> atomic
@@ -99,12 +103,18 @@ def download_all(
     max_workers: int,
     worker: Worker = download_track,
     sleep: Callable[[float], None] = time.sleep,
+    on_progress: ProgressFn | None = None,
 ) -> Generator[tuple[WorkItem, TrackResult]]:
     """Phase 2: run worker concurrently and yield (item, result) as each finishes."""
 
     def run(item: WorkItem) -> TrackResult:
-        sleep(random.uniform(1, 3))
-        return worker(item, preset, out_dir, settings)
+        token = progress.bind(item.key, on_progress) if on_progress is not None else None
+        try:
+            sleep(random.uniform(1, 3))
+            return worker(item, preset, out_dir, settings)  # reports for item.key in this thread
+        finally:
+            if token is not None:
+                progress.reset(token)
 
     pool = ThreadPoolExecutor(max_workers=max(1, max_workers))
     try:

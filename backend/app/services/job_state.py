@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
 
 from sqlmodel import Session, col, select
 
 from app.models import Job, TrackRecord, now
 from app.services.pipeline import TrackResult
+from app.services.presets import Preset
 from app.services.reports import write_reports
+from app.services.spotify_client import TrackMeta
 
 KEPT_STATUSES: frozenset[str] = frozenset({"done", "skipped", "manual"})
 StopFn = Callable[[], bool]
@@ -33,6 +35,27 @@ def until_stopped[T](items: Iterable[T], should_stop: StopFn | None) -> Iterator
         if should_stop is not None and should_stop():
             return
         yield item
+
+
+def create_job(
+    session: Session, url: str, kind: str, spotify_id: str, name: str,
+    preset: Preset, out_dir: Path, tracks: Sequence[TrackMeta],
+) -> tuple[Job, list[TrackRecord]]:  # fmt: skip
+    """Insert a running Job and one pending TrackRecord per track (positions are 1-based)."""
+    job = Job(url=url, kind=kind, spotify_id=spotify_id, name=name, preset=preset.value,
+              out_dir=str(out_dir))  # fmt: skip
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    assert job.id is not None
+    records = [
+        TrackRecord(job_id=job.id, spotify_id=t.spotify_id, position=i, title=t.title,
+                    artists=", ".join(t.artists), isrc=t.isrc, duration_ms=t.duration_ms)
+        for i, t in enumerate(tracks, start=1)
+    ]  # fmt: skip
+    session.add_all(records)
+    session.commit()
+    return job, records
 
 
 def job_records(session: Session, job_id: int) -> list[TrackRecord]:

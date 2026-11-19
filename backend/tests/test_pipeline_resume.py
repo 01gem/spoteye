@@ -113,3 +113,32 @@ def test_existing_file_is_skipped_without_matching(session: Session, tmp_path: P
     assert final[0].file_name == "01 - Artist - Song 1.m4a"
     assert matcher.calls == [] and worker.calls == []
     assert job.status == "done"
+
+
+class NotFoundFor(FakeMatcher):
+    def __init__(self, missing: str) -> None:
+        super().__init__()
+        self.missing = missing
+
+    def match(self, track: TrackMeta) -> MatchResult:
+        if track.spotify_id == self.missing:
+            self.calls.append(track.spotify_id)
+            return MatchResult("not_found", None, 0.0, [])
+        return super().match(track)
+
+
+def test_run_job_announces_matching_per_track_and_waiting_per_queued_item(
+    session: Session, tmp_path: Path
+) -> None:
+    settings = Settings("client", "http://127.0.0.1:8765/callback", tmp_path, None, max_workers=1)
+    job, records = create_job(session, "url", "playlist", "pl", "Mix", Preset.BEST, tmp_path / "Mix",
+                              TRACKS)  # fmt: skip
+    events: list[dict[str, object]] = []
+    run_job(session, job, list(zip(records, TRACKS)), NotFoundFor("sp2"), settings,  # type: ignore[arg-type]
+            accept_review=False, worker=FakeWorker(set()), sleep=lambda _s: None,
+            on_progress=events.append)  # fmt: skip
+
+    r1, r2, r3 = (r.id for r in records)
+    assert [(e["record_id"], e["phase"]) for e in events] == [
+        (r1, "matching"), (r2, "matching"), (r3, "matching"), (r1, "waiting"), (r3, "waiting")]
+    assert all(e["percent"] is None and e["type"] == "progress" for e in events)

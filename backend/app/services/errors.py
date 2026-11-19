@@ -18,6 +18,10 @@ NETWORK = "Network problem while downloading. Resume the job to retry."
 Rule = tuple[Callable[[str], bool], str]
 
 
+class DownloadError(Exception):
+    """Raised when yt-dlp cannot download the requested stream."""
+
+
 def _any(*needles: str) -> Callable[[str], bool]:
     return lambda text: any(n in text for n in needles)
 

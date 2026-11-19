@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
@@ -41,6 +43,37 @@ def run(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
     """Run yt-dlp without a shell or a console window; output decoded as UTF-8."""
     return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace",
                           timeout=timeout, creationflags=NO_WINDOW, check=False)  # fmt: skip
+
+
+def stream(args: list[str], timeout: float, on_line: Callable[[str], None]) -> int:
+    """Run yt-dlp like run(), passing each output line (stderr merged into stdout) to on_line.
+
+    Returns the exit code; kills the process and raises TimeoutExpired after timeout seconds.
+    """
+    expired = threading.Event()
+    with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                          encoding="utf-8", errors="replace", creationflags=NO_WINDOW) as proc:  # fmt: skip
+
+        def expire() -> None:
+            expired.set()
+            proc.kill()
+
+        timer = threading.Timer(timeout, expire)
+        timer.daemon = True
+        timer.start()
+        try:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                on_line(line.rstrip("\r\n"))
+        except BaseException:
+            proc.kill()
+            raise
+        finally:
+            timer.cancel()
+        returncode = proc.wait()
+    if expired.is_set():
+        raise subprocess.TimeoutExpired(args, timeout)
+    return returncode
 
 
 def version() -> str:

@@ -24,7 +24,7 @@ from app.services.spotify_client import SpotifyConfigError
 from app.web import auth
 from app.web.api_jobs import get_job_or_404, is_busy, load_detail
 from app.web.events import EventBus, job_event, record_event
-from app.web.schemas import RecordOut, record_out
+from app.web.schemas import JobDetail, RecordOut, record_out
 
 router = APIRouter(prefix="/api")
 CHUNK: int = 1024 * 1024
@@ -34,6 +34,11 @@ KEEPALIVE_S: float = 15
 
 def _sse(event: str, data: str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
+
+
+def snapshot_data(detail: JobDetail, bus: EventBus) -> str:
+    """The JobDetail plus "progress": {record_id: latest progress event} of running tracks."""
+    return json.dumps({**detail.model_dump(mode="json"), "progress": bus.progress(detail.id)})
 
 
 @router.get("/jobs/{job_id}/events")
@@ -48,7 +53,7 @@ async def events(job_id: int, request: Request) -> StreamingResponse:
 
     async def stream() -> AsyncIterator[str]:
         try:
-            yield _sse("snapshot", detail.model_dump_json())
+            yield _sse("snapshot", snapshot_data(detail, bus))
             while not await request.is_disconnected():
                 try:
                     event = await asyncio.to_thread(q.get, True, KEEPALIVE_S)

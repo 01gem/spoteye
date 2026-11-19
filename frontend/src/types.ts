@@ -124,26 +124,4 @@ export interface JobDetail extends JobSummary {
   records: TrackRecord[]
 }
 
-/** SSE "track": one record changed. */
-export interface TrackEvent {
-  type: 'track'
-  job_id: number
-  record_id: number
-  position: number
-  status: RecordStatus
-  score: number | null
-  source: string | null
-  output: string | null
-  upscaled: boolean
-  file_name: string | null
-  error: string | null
-}
-
-/** SSE "job": status and kept/total counts. */
-export interface JobEvent {
-  type: 'job'
-  job_id: number
-  status: JobStatus
-  done: number
-  total: number
-}
+export type * from './eventTypes'

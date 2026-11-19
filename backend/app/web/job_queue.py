@@ -10,14 +10,14 @@ from typing import Any, Literal
 
 from app.config import load_settings
 from app.db import get_session
-from app.models import Job, TrackRecord, now
+from app.models import Job, now
 from app.services.job_runner import resume_job, run_job
 from app.services.job_state import JobStopped, job_records
 from app.services.matcher import Matcher
 from app.services.spotify_client import SpotifyClient, TrackMeta
 from app.services.spotify_errors import log_failure
 from app.web import auth
-from app.web.events import EventBus, job_event, record_event
+from app.web.events import EventBus, job_callbacks, job_event
 
 log = logging.getLogger(__name__)
 
@@ -116,14 +116,8 @@ class JobQueue:
                     self._events.pop(job_id, None)
 
     def _run(self, job_id: int, kind: str, options: dict[str, Any], stop: threading.Event) -> None:
-        def on_record(record: TrackRecord) -> None:
-            self.bus.publish(job_id, record_event(record))
-
-        def on_job(job: Job, records: list[TrackRecord]) -> None:
-            self.bus.publish(job_id, job_event(job, records))
-
-        callbacks: dict[str, Any] = {"on_record": on_record, "on_job": on_job,
-                                     "should_stop": stop.is_set, **self.run_options}  # fmt: skip
+        callbacks: dict[str, Any] = {**job_callbacks(self.bus, job_id), "should_stop": stop.is_set,
+                                     **self.run_options}  # fmt: skip
         settings = load_settings()
         with get_session() as session:
             job = session.get(Job, job_id)

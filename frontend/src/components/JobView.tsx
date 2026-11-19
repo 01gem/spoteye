@@ -5,6 +5,7 @@ import { useJustFinished } from '../hooks/useJustFinished'
 import { BUSY_STATUSES, KEPT_STATUSES, RESUMABLE_STATUSES } from '../types'
 import type { JobStatus, RecordStatus, TrackRecord } from '../types'
 import FinishedBanner from './FinishedBanner'
+import ProgressSummary from './ProgressSummary'
 import SaveLocation from './SaveLocation'
 import StatusPill from './StatusPill'
 import StopButton from './StopButton'
@@ -20,7 +21,7 @@ function countOf(records: TrackRecord[], ...statuses: RecordStatus[]): number {
 }
 
 export default function JobView({ jobId, onStatusChange }: Props) {
-  const { job, records, connected, updateRecord } = useJobEvents(jobId)
+  const { job, records, progress, connected, updateRecord } = useJobEvents(jobId)
   const [resuming, setResuming] = useState(false)
   const [resumeError, setResumeError] = useState<string | null>(null)
   const status = job?.status
@@ -101,6 +102,7 @@ export default function JobView({ jobId, onStatusChange }: Props) {
               {n} {label}
             </span>
           ))}
+          {job.status === 'running' && <ProgressSummary progress={progress} />}
           {busy && <StopButton jobId={job.id} />}
           {RESUMABLE_STATUSES.includes(job.status) && (
             <button
@@ -126,7 +128,14 @@ export default function JobView({ jobId, onStatusChange }: Props) {
       ) : (
         <ol className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3">
           {records.map((r) => (
-            <TrackRow key={r.id} jobId={jobId} record={r} attachDisabled={busy} onUpdated={updateRecord} />
+            <TrackRow
+              key={r.id}
+              jobId={jobId}
+              record={r}
+              progress={progress[r.id]}
+              attachDisabled={busy}
+              onUpdated={updateRecord}
+            />
           ))}
         </ol>
       )}

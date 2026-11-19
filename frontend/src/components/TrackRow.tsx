@@ -1,15 +1,18 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { errorMessage, revealFile } from '../api'
 import { trackErrorText } from '../messages'
 import { KEPT_STATUSES, MISSING_STATUSES } from '../types'
-import type { TrackRecord } from '../types'
+import type { ProgressEvent, TrackRecord } from '../types'
 import AttachButton from './AttachButton'
 import MatchPicker from './MatchPicker'
 import StatusPill from './StatusPill'
+import TrackProgress from './TrackProgress'
 
 interface Props {
   jobId: number
   record: TrackRecord
+  /** Live phase/download progress while the job works on this track. */
+  progress?: ProgressEvent
   /** Job is queued or running: attach and choose would answer 409. */
   attachDisabled: boolean
   onUpdated: (record: TrackRecord) => void
@@ -17,7 +20,7 @@ interface Props {
 
 const BUSY_TITLE = 'Wait until the job has finished'
 
-export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: Props) {
+function TrackRow({ jobId, record, progress, attachDisabled, onUpdated }: Props) {
   const [revealError, setRevealError] = useState<string | null>(null)
   const [picking, setPicking] = useState(false)
   const revealable = KEPT_STATUSES.includes(record.status) && record.file_name !== null
@@ -50,6 +53,7 @@ export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: P
             </span>
           )}
         </div>
+        {progress && <TrackProgress progress={progress} />}
         {record.error && <p className="text-xs text-red-400">{trackErrorText(record.error)}</p>}
         <p className="truncate text-xs text-zinc-400">{record.artists}</p>
         <p className="text-xs text-zinc-500">
@@ -117,3 +121,6 @@ export default function TrackRow({ jobId, record, attachDisabled, onUpdated }: P
     </li>
   )
 }
+
+// Memoized: progress events re-render only the row they belong to.
+export default memo(TrackRow)
